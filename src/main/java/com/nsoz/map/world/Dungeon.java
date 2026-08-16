@@ -100,17 +100,13 @@ public class Dungeon extends World {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
 
-                        // Xóa trạng thái Mob cũ ở client trước khi tạo wave mới.
-                        // Nếu chỉ gửi MAP_INFO sau khi tạo Mob mới, client có thể
-                        // vẫn giữ các Mob cũ đã chết theo cùng ID và bỏ qua Mob mới.
-                        refreshZoneMembers(zone);
-
-                        // recoveryAllMonsters() đã tự gọi zone.addMob(), và
-                        // zone.addMob() đã gửi SERVER_ADD_MOB cho client.
+                        // Tạo lại wave ở server. Client đã có các Mob cũ với cùng ID,
+                        // nên SERVER_ADD_MOB có thể bị client bỏ qua. Gửi NPC_LIVE
+                        // sau khi tạo wave để buộc client đánh thức lại các Mob theo ID.
                         zone.recoveryAllMonsters(0);
-
-                        // Gửi lại trạng thái đầy đủ sau khi wave mới đã tồn tại.
-                        refreshZoneMembers(zone);
+                        for (Mob mob : zone.getMonsters()) {
+                            zone.getService().recoveryMonster(mob);
+                        }
                     }
                 }
             }
@@ -171,26 +167,6 @@ public class Dungeon extends World {
             }
         }
         countDown--;
-    }
-
-    /**
-     * Đồng bộ lại đúng Zone đang tạo wave mới.
-     * Gửi MAP_INFO trước khi respawn để client xóa trạng thái Mob cũ,
-     * sau đó gửi lại MAP_INFO sau khi Mob mới đã được tạo.
-     */
-    private void refreshZoneMembers(Zone zone) {
-        if (zone == null) {
-            return;
-        }
-        for (Char member : zone.getChars()) {
-            try {
-                if (member != null && !member.isCleaned) {
-                    member.getService().sendZone();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     public void open() {
