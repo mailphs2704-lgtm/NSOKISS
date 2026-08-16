@@ -86,7 +86,14 @@ public class Dungeon extends World {
                         }
                     }
                     if (!isBossLive) {
-                        zone.killAllMonsters();
+                        // Không xóa Mob khỏi Zone ở hang 9x.
+                        // Client v7 vẫn giữ các Mob cũ theo ID; chỉ cần
+                        // đánh chết rồi NPC_LIVE lại chính các Mob đó ở wave sau.
+                        for (Mob mob : monsters) {
+                            int hp = mob.hp;
+                            mob.die();
+                            zone.getService().attackMonster(hp, false, mob);
+                        }
                         addPointPB(numberLiving);
                     }
                 }
@@ -100,14 +107,14 @@ public class Dungeon extends World {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
 
-                        // Wave mới dùng lại ID Mob cũ (0, 1, 2, ...).
-                        // Client v7 vẫn giữ Mob cũ ở trạng thái chết và bỏ qua
-                        // SERVER_ADD_MOB nếu ID đó đã tồn tại. Vì vậy sau khi
-                        // tạo wave mới phải dùng NPC_LIVE để đánh thức Mob cũ
-                        // ngay lập tức, thay vì chỉ gửi SERVER_ADD_MOB/MAP_INFO.
-                        zone.recoveryAllMonsters(0);
+                        // Giữ nguyên Mob object + ID mà client đã biết.
+                        // Chỉ hồi sinh Mob và gửi NPC_LIVE, tránh SERVER_ADD_MOB
+                        // với ID trùng Mob cũ khiến client v7 bỏ qua.
                         for (Mob mob : zone.getMonsters()) {
-                            zone.getService().recoveryMonster(mob);
+                            if (mob.isDead) {
+                                mob.recovery();
+                                zone.getService().recoveryMonster(mob);
+                            }
                         }
                     }
                 }
