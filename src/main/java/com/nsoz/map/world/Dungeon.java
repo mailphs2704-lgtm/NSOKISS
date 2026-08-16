@@ -172,7 +172,7 @@ public class Dungeon extends World {
     private void refreshMembersInCurrentZones() {
         for (Char member : getMembers()) {
             try {
-                if (member != null && member.zone != null && member.zone.getWorld() == this) {
+                if (member != null && !member.isCleaned && member.zone != null) {
                     member.getService().sendZone();
                 }
             } catch (Exception e) {
