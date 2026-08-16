@@ -100,17 +100,24 @@ public class Dungeon extends World {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
 
-                        // Xóa trạng thái Mob cũ ở client TRƯỚC khi tạo wave mới.
-                        // Nếu tạo Mob trước rồi mới MAP_CLEAR, client có thể bỏ
-                        // qua các Mob mới vì chúng dùng lại cùng ID/index của wave cũ.
+                        // Chỉ đồng bộ wave mới bằng MAP_INFO.
+                        // SERVER_ADD_MOB/NPC_LIVE có thể giữ lại state Mob cũ ở client v7.
+                        // MAP_INFO tự clear danh sách Mob phía client rồi dựng lại toàn bộ.
                         for (Char member : zone.getChars()) {
                             member.getService().clearMap();
                         }
 
-                        zone.recoveryAllMonsters(0);
+                        // Tạo lại Mob trực tiếp trong danh sách server, không gửi SERVER_ADD_MOB.
+                        // Sau đó sendZone() sẽ gửi một MAP_INFO hoàn chỉnh cho client.
+                        zone.getMonsters().clear();
+                        int mobId = 0;
+                        for (var mobPosition : zone.tilemap.monsterCoordinates) {
+                            Mob monster = zone.getMobFactory().createMonster(mobId++, mobPosition, 0);
+                            if (monster != null) {
+                                zone.getMonsters().add(monster);
+                            }
+                        }
 
-                        // MAP_INFO chứa toàn bộ danh sách Mob hiện tại. Gửi lại
-                        // sau MAP_CLEAR để client dựng lại Mob ngay tại chỗ.
                         for (Char member : zone.getChars()) {
                             member.getService().sendZone();
                         }
