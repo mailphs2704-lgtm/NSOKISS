@@ -100,17 +100,15 @@ public class Dungeon extends World {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
 
-                        // Xóa trạng thái Mob cũ ở client trước khi tạo wave mới.
-                        // Nếu chỉ gửi MAP_INFO sau khi tạo Mob mới, client có thể
-                        // vẫn giữ các Mob cũ đã chết theo cùng ID và bỏ qua Mob mới.
-                        refreshZoneMembers(zone);
-
-                        // recoveryAllMonsters() đã tự gọi zone.addMob(), và
-                        // zone.addMob() đã gửi SERVER_ADD_MOB cho client.
+                        // Wave mới dùng lại ID Mob cũ (0, 1, 2, ...).
+                        // Client v7 vẫn giữ Mob cũ ở trạng thái chết và bỏ qua
+                        // SERVER_ADD_MOB nếu ID đó đã tồn tại. Vì vậy sau khi
+                        // tạo wave mới phải dùng NPC_LIVE để đánh thức Mob cũ
+                        // ngay lập tức, thay vì chỉ gửi SERVER_ADD_MOB/MAP_INFO.
                         zone.recoveryAllMonsters(0);
-
-                        // Gửi lại trạng thái đầy đủ sau khi wave mới đã tồn tại.
-                        refreshZoneMembers(zone);
+                        for (Mob mob : zone.getMonsters()) {
+                            zone.getService().recoveryMonster(mob);
+                        }
                     }
                 }
             }
@@ -171,26 +169,6 @@ public class Dungeon extends World {
             }
         }
         countDown--;
-    }
-
-    /**
-     * Đồng bộ lại đúng Zone đang tạo wave mới.
-     * Gửi MAP_INFO trước khi respawn để client xóa trạng thái Mob cũ,
-     * sau đó gửi lại MAP_INFO sau khi Mob mới đã được tạo.
-     */
-    private void refreshZoneMembers(Zone zone) {
-        if (zone == null) {
-            return;
-        }
-        for (Char member : zone.getChars()) {
-            try {
-                if (member != null && !member.isCleaned) {
-                    member.getService().sendZone();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     public void open() {
