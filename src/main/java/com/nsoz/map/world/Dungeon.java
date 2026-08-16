@@ -99,15 +99,21 @@ public class Dungeon extends World {
                     } else {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
+
+                        // Xóa trạng thái Mob cũ ở client TRƯỚC khi tạo wave mới.
+                        // Nếu tạo Mob trước rồi mới MAP_CLEAR, client có thể bỏ
+                        // qua các Mob mới vì chúng dùng lại cùng ID/index của wave cũ.
+                        for (Char member : zone.getChars()) {
+                            member.getService().clearMap();
+                        }
+
                         zone.recoveryAllMonsters(0);
 
-                        // Các Mob của wave trước đã được client đánh dấu chết.
-                        // Wave mới dùng lại cùng ID, nên cần gửi NPC_LIVE để
-                        // client hồi sinh Mob hiện có thay vì chỉ SERVER_ADD_MOB.
-                        for (Mob mob : zone.getMonsters()) {
-                            zone.addMobForRespawnList(mob);
+                        // MAP_INFO chứa toàn bộ danh sách Mob hiện tại. Gửi lại
+                        // sau MAP_CLEAR để client dựng lại Mob ngay tại chỗ.
+                        for (Char member : zone.getChars()) {
+                            member.getService().sendZone();
                         }
-                        zone.recoveryMonster();
                     }
                 }
             }
@@ -190,11 +196,12 @@ public class Dungeon extends World {
             }
         } else {
             Map map = MapManager.getInstance().find(mapID);
-            Cave cave = new Cave(0, map.tilemap, map);
+            TileMap tilemap = map.tilemap;
+            Cave cave = new Cave(0, tilemap, map);
             cave.setWorld(this);
             addZone(cave);
             if (index > 0) {
-                service.serverMessage(map.tilemap.name + " đã mở.");
+                service.serverMessage(tilemap.name + " đã mở.");
             }
         }
     }
