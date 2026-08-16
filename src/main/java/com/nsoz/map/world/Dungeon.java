@@ -101,11 +101,12 @@ public class Dungeon extends World {
                         Zone zone = zones.get(index);
 
                         // Tạo lại wave ở server. Client đã có các Mob cũ với cùng ID,
-                        // nên SERVER_ADD_MOB có thể bị client bỏ qua. Gửi NPC_LIVE
-                        // sau khi tạo wave để buộc client đánh thức lại các Mob theo ID.
+                        // nên chỉ gửi NPC_LIVE có thể không đủ nếu client đã xóa Mob chết.
+                        // Gửi lại toàn bộ MAP_INFO cho người chơi đang ở đúng zone để
+                        // client dựng lại danh sách Mob ngay lập tức, không cần di chuyển.
                         zone.recoveryAllMonsters(0);
-                        for (Mob mob : zone.getMonsters()) {
-                            zone.getService().recoveryMonster(mob);
+                        for (Char member : zone.getChars()) {
+                            member.getService().sendZone();
                         }
                     }
                 }
