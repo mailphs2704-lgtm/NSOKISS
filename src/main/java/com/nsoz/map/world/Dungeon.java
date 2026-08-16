@@ -35,6 +35,7 @@ public class Dungeon extends World {
     public boolean bossAppeared = false;
     private boolean finished;
     private int luanHoiWave = 1;
+    private int luanHoiWaveMobCount = 0;
     private boolean luanHoiTransitioning = false;
 
     public Dungeon(int level, int time) {
@@ -46,6 +47,9 @@ public class Dungeon extends World {
         this.time = time;
         this.level = level;
         open();
+        if (level == 5) {
+            this.luanHoiWaveMobCount = countAllMonsters();
+        }
         this.timeCreate = System.currentTimeMillis();
         initFinished = true;
     }
@@ -74,8 +78,8 @@ public class Dungeon extends World {
             return;
         }
 
-        // HD6X có 3 map cuối cùng; level 5 chính là Luân Hồi Kiếp.
-        // Map 1 và Map 2 vẫn dùng nguyên cơ chế cũ ở nhánh bên dưới.
+        // HD6X có 3 map; level 5 là map 3 - Luân Hồi Kiếp.
+        // Map 1 và Map 2 giữ nguyên cơ chế chuyển map cũ.
         if (level == 5) {
             updateLuanHoiKiep();
         } else {
@@ -85,14 +89,23 @@ public class Dungeon extends World {
         countDown--;
     }
 
+    private int countAllMonsters() {
+        int count = 0;
+        if (zones != null) {
+            for (Zone zone : zones) {
+                if (zone != null && zone.getMonsters() != null) {
+                    count += zone.getMonsters().size();
+                }
+            }
+        }
+        return count;
+    }
+
     /**
      * Luân Hồi Kiếp - map 3 của HD6X.
-     *
-     * Mỗi wave chỉ mở quái ở một trong ba zone 157/158/159 như cơ chế gốc.
-     * Khi toàn bộ quái của wave hiện tại chết, server quyết định kết thúc
-     * hoặc tạo wave kế tiếp. Mob của wave mới được tạo trực tiếp trong Zone
-     * và sau đó gửi MAP_INFO lại cho từng người đang đứng trong zone. Như vậy
-     * client v7 được dựng lại danh sách Mob mà không cần nhân vật di chuyển.
+     * Wave đầu tiên dùng toàn bộ 3 zone 157/158/159 giống cơ chế gốc.
+     * Sau khi wave đó chết, mỗi lần hồi sinh chọn ngẫu nhiên 1 trong 3 zone.
+     * Có thể kết thúc ngay hoặc tiếp tục wave mới theo cơ chế gốc.
      */
     private void updateLuanHoiKiep() {
         if (finished || luanHoiTransitioning) {
@@ -125,9 +138,13 @@ public class Dungeon extends World {
             return;
         }
 
-        // Tất cả quái của wave đã chết. Không spawn lại trong cùng tick.
         luanHoiTransitioning = true;
         try {
+            // Điểm được cộng đúng một lần cho mỗi wave đã hoàn thành.
+            if (luanHoiWaveMobCount > 0) {
+                addPointPB(luanHoiWaveMobCount);
+            }
+
             int rand = NinjaUtils.nextInt(2);
             if (rand == 0) {
                 finish();
@@ -142,13 +159,13 @@ public class Dungeon extends World {
     }
 
     /**
-     * Tạo một wave Luân Hồi Kiếp mà không gọi Zone.addMob(), vì addMob()
-     * lập tức gửi SERVER_ADD_MOB từng Mob với ID 0..n. Client v7 có thể giữ
-     * state Mob cũ và bỏ qua các packet này cho tới khi nhân vật di chuyển.
+     * Tạo wave mới mà không dùng Zone.addMob(), vì addMob() gửi
+     * SERVER_ADD_MOB từng Mob với ID 0..n. Client v7 có thể giữ state Mob cũ
+     * và chỉ cập nhật lại sau PLAYER_MOVE.
      *
-     * Thay vào đó server thay toàn bộ danh sách Mob trong zone rồi gửi lại
-     * MAP_INFO cho người chơi đang ở zone. MAP_INFO là đúng packet được dùng
-     * khi player vào zone và chứa toàn bộ Mob hiện tại.
+     * Thay vào đó thay trực tiếp danh sách Mob của zone rồi gửi MAP_INFO cho
+     * những người đang đứng trong zone. MAP_INFO là packet đầy đủ được dùng
+     * khi player join zone và chứa lại toàn bộ Mob hiện tại.
      */
     private void spawnLuanHoiWave() {
         int zoneIndex = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
@@ -157,13 +174,10 @@ public class Dungeon extends World {
             return;
         }
 
-        // Ghi nhận điểm của wave vừa hoàn thành theo đúng logic gốc:
-        // số quái của wave được tính trước khi thay danh sách Mob.
-        // Các zone không được chọn vẫn giữ trạng thái chết.
-        int newMobId = 0;
         List<Mob> monsters = zone.getMonsters();
         monsters.clear();
 
+        int newMobId = 0;
         for (com.nsoz.mob.MobPosition position : zone.tilemap.monsterCoordinates) {
             Mob mob = zone.getMobFactory().createMonster(newMobId++, position, 0);
             if (mob != null) {
@@ -174,8 +188,9 @@ public class Dungeon extends World {
             }
         }
 
-        // Gửi lại toàn bộ MAP_INFO cho người chơi trong đúng zone.
-        // Đây là bước quan trọng để client v7 dựng lại Mob ngay tại chỗ.
+        luanHoiWaveMobCount = monsters.size();
+
+        // Ép client v7 dựng lại MAP_INFO ngay lập tức; không cần di chuyển.
         for (Char member : zone.getChars()) {
             if (member != null && !member.isCleaned) {
                 member.getService().sendZone();
