@@ -34,6 +34,9 @@ public class Dungeon extends World {
     public int time;
     public boolean bossAppeared = false;
     private boolean finished;
+    private int luanHoiWave = 1;
+    private boolean luanHoiTransitioning = false;
+
     public Dungeon(int level, int time) {
         setType(World.DUNGEON);
         this.name = "Dungeon";
@@ -70,112 +73,171 @@ public class Dungeon extends World {
             close();
             return;
         }
+
+        // HD6X có 3 map cuối cùng; level 5 chính là Luân Hồi Kiếp.
+        // Map 1 và Map 2 vẫn dùng nguyên cơ chế cũ ở nhánh bên dưới.
         if (level == 5) {
-            boolean isMonsterLive = false;
-            for (Zone zone : zones) {
-                // tối ưu lại hang 9x
-                List<Mob> monsters = zone.getLivingMonsters();
-                int numberLiving = monsters.size();
-                if (numberLiving > 0) {
-                    boolean isBossLive = false;
-                    for (Mob mob : monsters) {
-                        if (mob.isBoss) {
-                            isBossLive = true;
-                            isMonsterLive = true;
+            updateLuanHoiKiep();
+        } else {
+            updateNormalDungeon();
+        }
+
+        countDown--;
+    }
+
+    /**
+     * Luân Hồi Kiếp - map 3 của HD6X.
+     *
+     * Mỗi wave chỉ mở quái ở một trong ba zone 157/158/159 như cơ chế gốc.
+     * Khi toàn bộ quái của wave hiện tại chết, server quyết định kết thúc
+     * hoặc tạo wave kế tiếp. Mob của wave mới được tạo trực tiếp trong Zone
+     * và sau đó gửi MAP_INFO lại cho từng người đang đứng trong zone. Như vậy
+     * client v7 được dựng lại danh sách Mob mà không cần nhân vật di chuyển.
+     */
+    private void updateLuanHoiKiep() {
+        if (finished || luanHoiTransitioning) {
+            return;
+        }
+
+        boolean hasLivingMonster = false;
+        boolean hasBoss = false;
+
+        for (Zone zone : zones) {
+            if (zone == null) {
+                continue;
+            }
+            List<Mob> living = zone.getLivingMonsters();
+            if (!living.isEmpty()) {
+                hasLivingMonster = true;
+                for (Mob mob : living) {
+                    if (mob.isBoss) {
+                        hasBoss = true;
+                        break;
+                    }
+                }
+            }
+            if (hasBoss) {
+                break;
+            }
+        }
+
+        if (hasLivingMonster) {
+            return;
+        }
+
+        // Tất cả quái của wave đã chết. Không spawn lại trong cùng tick.
+        luanHoiTransitioning = true;
+        try {
+            int rand = NinjaUtils.nextInt(2);
+            if (rand == 0) {
+                finish();
+                return;
+            }
+
+            luanHoiWave++;
+            spawnLuanHoiWave();
+        } finally {
+            luanHoiTransitioning = false;
+        }
+    }
+
+    /**
+     * Tạo một wave Luân Hồi Kiếp mà không gọi Zone.addMob(), vì addMob()
+     * lập tức gửi SERVER_ADD_MOB từng Mob với ID 0..n. Client v7 có thể giữ
+     * state Mob cũ và bỏ qua các packet này cho tới khi nhân vật di chuyển.
+     *
+     * Thay vào đó server thay toàn bộ danh sách Mob trong zone rồi gửi lại
+     * MAP_INFO cho người chơi đang ở zone. MAP_INFO là đúng packet được dùng
+     * khi player vào zone và chứa toàn bộ Mob hiện tại.
+     */
+    private void spawnLuanHoiWave() {
+        int zoneIndex = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
+        Zone zone = zones.get(zoneIndex);
+        if (zone == null) {
+            return;
+        }
+
+        // Ghi nhận điểm của wave vừa hoàn thành theo đúng logic gốc:
+        // số quái của wave được tính trước khi thay danh sách Mob.
+        // Các zone không được chọn vẫn giữ trạng thái chết.
+        int newMobId = 0;
+        List<Mob> monsters = zone.getMonsters();
+        monsters.clear();
+
+        for (com.nsoz.mob.MobPosition position : zone.tilemap.monsterCoordinates) {
+            Mob mob = zone.getMobFactory().createMonster(newMobId++, position, 0);
+            if (mob != null) {
+                monsters.add(mob);
+            }
+            if (newMobId >= 127) {
+                break;
+            }
+        }
+
+        // Gửi lại toàn bộ MAP_INFO cho người chơi trong đúng zone.
+        // Đây là bước quan trọng để client v7 dựng lại Mob ngay tại chỗ.
+        for (Char member : zone.getChars()) {
+            if (member != null && !member.isCleaned) {
+                member.getService().sendZone();
+            }
+        }
+    }
+
+    private void updateNormalDungeon() {
+        Zone zone = zones.get(index);
+        if (zone != null) {
+            List<Mob> mobs = zone.getLivingMonsters();
+            if (mobs.isEmpty()) {
+                if ((index == MAP_DUNGEON[level].length - 1) || (level == 2 && index == 4)) {
+                    if (level == 4 && !bossAppeared) {
+                        int size = zone.getMonsters().size();
+                        Mob mob = new Mob(size, (short) 138, 120000000, (short) 75, (short) 756,
+                                (short) 672, false, true, zone);
+                        size++;
+                        Mob mob2 = new Mob(size, (short) 138, 120000000, (short) 75, (short) 708,
+                                (short) 672, false, true, zone);
+                        zone.addMob(mob);
+                        zone.addMob(mob2);
+                        bossAppeared = true;
+                    } else {
+                        finish();
+                    }
+                } else if (level == 2 && index == 1) {
+                    boolean isAllMonsterLive = false;
+                    for (int i = 2; i <= MAP_DUNGEON_5X.length; i++) {
+                        Zone z = zones.get(i);
+                        if (z.getLivingMonsters().size() > 0) {
+                            isAllMonsterLive = true;
                             break;
                         }
                     }
-                    if (!isBossLive) {
-                        // Không xóa Mob khỏi Zone ở hang 9x.
-                        // Client v7 vẫn giữ các Mob cũ theo ID; chỉ cần
-                        // đánh chết rồi NPC_LIVE lại chính các Mob đó ở wave sau.
-                        for (Mob mob : monsters) {
-                            int hp = mob.hp;
-                            mob.die();
-                            zone.getService().attackMonster(hp, false, mob);
-                        }
-                        addPointPB(numberLiving);
+                    if (!isAllMonsterLive) {
+                        index = 2;
+                        open();
+                        index = 4;
                     }
+                } else {
+                    index++;
+                    open();
                 }
-            }
-            if (!isMonsterLive) {
-                if (!finished) {
-                    int rand = NinjaUtils.nextInt(2);
-                    if (rand == 0) {
-                        finish();
-                    } else {
-                        int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
-                        Zone zone = zones.get(index);
-
-                        // Giữ nguyên Mob object + ID mà client đã biết.
-                        // Chỉ hồi sinh Mob và gửi NPC_LIVE, tránh SERVER_ADD_MOB
-                        // với ID trùng Mob cũ khiến client v7 bỏ qua.
-                        for (Mob mob : zone.getMonsters()) {
-                            if (mob.isDead) {
-                                mob.recovery();
-                                zone.getService().recoveryMonster(mob);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            Zone zone = zones.get(index);
-            if (zone != null) {
-                List<Mob> mobs = zone.getLivingMonsters();
-                if (mobs.isEmpty()) {
-                    if ((index == MAP_DUNGEON[level].length - 1) || (level == 2 && index == 4)) {
-                        if (level == 4 && !bossAppeared) {
-                            int size = zone.getMonsters().size();
-                            Mob mob = new Mob(size, (short) 138, 120000000, (short) 75, (short) 756,
-                                    (short) 672, false, true, zone);
-                            size++;
-                            Mob mob2 = new Mob(size, (short) 138, 120000000, (short) 75, (short) 708,
-                                    (short) 672, false, true, zone);
-                            zone.addMob(mob);
-                            zone.addMob(mob2);
-                            bossAppeared = true;
-                        } else {
-                            finish();
-                        }
-                    } else if (level == 2 && index == 1) {
-                        boolean isAllMonsterLive = false;
-                        for (int i = 2; i <= MAP_DUNGEON_5X.length; i++) {
-                            Zone z = zones.get(i);
-                            if (z.getLivingMonsters().size() > 0) {
-                                isAllMonsterLive = true;
+            } else {
+                if (zone.tilemap.id == 114 || zone.tilemap.id == 115) {
+                    if (mobs.get(0).hp > 100) {
+                        boolean mobLive = false;
+                        for (Mob mob : mobs) {
+                            if (mob.template.id == MobName.TRUNG_TAM_SAC
+                                    || mob.template.id == MobName.LAM_THACH_THAO) {
+                                mobLive = true;
                                 break;
                             }
                         }
-                        if (!isAllMonsterLive) {
-                            index = 2;
-                            open();
-                            index = 4;
-                        }
-                    } else {
-                        index++;
-                        open();
-                    }
-                } else {
-                    if (zone.tilemap.id == 114 || zone.tilemap.id == 115) {
-                        if (mobs.get(0).hp > 100) {
-                            boolean mobLive = false;
-                            for (Mob mob : mobs) {
-                                if (mob.template.id == MobName.TRUNG_TAM_SAC
-                                        || mob.template.id == MobName.LAM_THACH_THAO) {
-                                    mobLive = true;
-                                    break;
-                                }
-                            }
-                            if (!mobLive) {
-                                zone.setHPAllMonsters(100);
-                            }
+                        if (!mobLive) {
+                            zone.setHPAllMonsters(100);
                         }
                     }
                 }
             }
         }
-        countDown--;
     }
 
     public void open() {
@@ -272,7 +334,6 @@ public class Dungeon extends World {
                 e.printStackTrace();
             }
         }
-
     }
 
     public void addExp(Char _c, long exp) {
@@ -286,7 +347,6 @@ public class Dungeon extends World {
                 e.printStackTrace();
             }
         }
-
     }
 
     public void close() {
