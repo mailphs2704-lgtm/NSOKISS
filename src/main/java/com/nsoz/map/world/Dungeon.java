@@ -99,8 +99,18 @@ public class Dungeon extends World {
                     } else {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
+
+                        // Xóa trạng thái Mob cũ ở client trước khi tạo wave mới.
+                        // Nếu chỉ gửi MAP_INFO sau khi tạo Mob mới, client có thể
+                        // vẫn giữ các Mob cũ đã chết theo cùng ID và bỏ qua Mob mới.
+                        refreshZoneMembers(zone);
+
+                        // recoveryAllMonsters() đã tự gọi zone.addMob(), và
+                        // zone.addMob() đã gửi SERVER_ADD_MOB cho client.
                         zone.recoveryAllMonsters(0);
-                        refreshMembersInCurrentZones();
+
+                        // Gửi lại trạng thái đầy đủ sau khi wave mới đã tồn tại.
+                        refreshZoneMembers(zone);
                     }
                 }
             }
@@ -164,15 +174,17 @@ public class Dungeon extends World {
     }
 
     /**
-     * Khi Luân Hồi Kiếp tạo lại một lượt quái, server đã có Mob mới nhưng
-     * client có thể vẫn giữ trạng thái của các Mob cũ đã chết. Ép client
-     * đồng bộ lại MAP_INFO để hiển thị ngay toàn bộ quái của lượt mới,
-     * thay vì chỉ hiện khi nhân vật di chuyển.
+     * Đồng bộ lại đúng Zone đang tạo wave mới.
+     * Gửi MAP_INFO trước khi respawn để client xóa trạng thái Mob cũ,
+     * sau đó gửi lại MAP_INFO sau khi Mob mới đã được tạo.
      */
-    private void refreshMembersInCurrentZones() {
-        for (Char member : getMembers()) {
+    private void refreshZoneMembers(Zone zone) {
+        if (zone == null) {
+            return;
+        }
+        for (Char member : zone.getChars()) {
             try {
-                if (member != null && !member.isCleaned && member.zone != null) {
+                if (member != null && !member.isCleaned) {
                     member.getService().sendZone();
                 }
             } catch (Exception e) {
