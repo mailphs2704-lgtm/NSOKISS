@@ -99,19 +99,15 @@ public class Dungeon extends World {
                     } else {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
-
-                        // Tạo lại wave ở server. Client có thể vẫn giữ trạng thái
-                        // các Mob cũ với cùng ID, vì vậy chỉ SERVER_ADD_MOB/NPC_LIVE
-                        // không đảm bảo client dựng lại danh sách Mob.
                         zone.recoveryAllMonsters(0);
 
-                        // MAP_CLEAR + MAP_INFO chính là chuỗi đồng bộ lại map.
-                        // Xóa trạng thái map phía client trước, sau đó gửi toàn bộ
-                        // Mob/NPC/item hiện tại để client dựng lại ngay tại chỗ.
-                        for (Char member : zone.getChars()) {
-                            member.getService().clearMap();
-                            member.getService().sendZone();
+                        // Các Mob của wave trước đã được client đánh dấu chết.
+                        // Wave mới dùng lại cùng ID, nên cần gửi NPC_LIVE để
+                        // client hồi sinh Mob hiện có thay vì chỉ SERVER_ADD_MOB.
+                        for (Mob mob : zone.getMonsters()) {
+                            zone.addMobForRespawnList(mob);
                         }
+                        zone.recoveryMonster();
                     }
                 }
             }
