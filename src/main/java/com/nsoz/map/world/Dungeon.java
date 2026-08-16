@@ -100,6 +100,7 @@ public class Dungeon extends World {
                         int index = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
                         Zone zone = zones.get(index);
                         zone.recoveryAllMonsters(0);
+                        refreshMembersInCurrentZones();
                     }
                 }
             }
@@ -160,6 +161,24 @@ public class Dungeon extends World {
             }
         }
         countDown--;
+    }
+
+    /**
+     * Khi Luân Hồi Kiếp tạo lại một lượt quái, server đã có Mob mới nhưng
+     * client có thể vẫn giữ trạng thái của các Mob cũ đã chết. Ép client
+     * đồng bộ lại MAP_INFO để hiển thị ngay toàn bộ quái của lượt mới,
+     * thay vì chỉ hiện khi nhân vật di chuyển.
+     */
+    private void refreshMembersInCurrentZones() {
+        for (Char member : getMembers()) {
+            try {
+                if (member != null && member.zone != null && member.zone.getWorld() == this) {
+                    member.getService().sendZone();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void open() {
