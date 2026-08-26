@@ -159,13 +159,8 @@ public class Dungeon extends World {
     }
 
     /**
-     * Tạo wave mới mà không dùng Zone.addMob(), vì addMob() gửi
-     * SERVER_ADD_MOB từng Mob với ID 0..n. Client v7 có thể giữ state Mob cũ
-     * và chỉ cập nhật lại sau PLAYER_MOVE.
-     *
-     * Thay vào đó thay trực tiếp danh sách Mob của zone rồi gửi MAP_INFO cho
-     * những người đang đứng trong zone. MAP_INFO là packet đầy đủ được dùng
-     * khi player join zone và chứa lại toàn bộ Mob hiện tại.
+     * Hồi sinh wave mới trên một map ngẫu nhiên bằng NPC_LIVE.
+     * Mob cũ được giữ nguyên ID và tọa độ để client V7 không lệch slot/animation.
      */
     private void spawnLuanHoiWave() {
         int zoneIndex = NinjaUtils.nextInt(MAP_DUNGEON_9X.length);
@@ -174,28 +169,8 @@ public class Dungeon extends World {
             return;
         }
 
-        List<Mob> monsters = zone.getMonsters();
-        monsters.clear();
-
-        int newMobId = 0;
-        for (com.nsoz.mob.MobPosition position : zone.tilemap.monsterCoordinates) {
-            Mob mob = zone.getMobFactory().createMonster(newMobId++, position, 0);
-            if (mob != null) {
-                monsters.add(mob);
-            }
-            if (newMobId >= 127) {
-                break;
-            }
-        }
-
-        luanHoiWaveMobCount = monsters.size();
-
-        // Ép client v7 dựng lại MAP_INFO ngay lập tức; không cần di chuyển.
-        for (Char member : zone.getChars()) {
-            if (member != null && !member.isCleaned) {
-                member.getService().sendZone();
-            }
-        }
+        zone.recoveryAllMonsters(0);
+        luanHoiWaveMobCount = zone.getMonsters().size();
     }
 
     private void updateNormalDungeon() {
