@@ -681,17 +681,18 @@ public class Zone {
         }
     }
 
+    /**
+     * Hồi sinh tại chỗ để client giữ nguyên slot mob, ID và tọa độ đã nhận từ MAP_INFO.
+     * Không xóa/tạo lại mob bằng SERVER_ADD_MOB vì client V7 có thể còn state của mob đã chết.
+     */
     public void recoveryAllMonsters(int level) {
-        lockMob.writeLock().lock();
-        try {
-            monsters.clear();
-        } finally {
-            lockMob.writeLock().unlock();
-        }
-        int id = 0;
-        for (MobPosition mob : tilemap.monsterCoordinates) {
-            Mob monster = mobFactory.createMonster(id++, mob, level);
-            addMob(monster);
+        List<Mob> currentMonsters = getMonsters();
+        for (Mob monster : currentMonsters) {
+            int hp = monster.template.hp;
+            hp += hp * (level * 20) / 100;
+            monster.originalHp = hp;
+            monster.recovery();
+            getService().recoveryMonster(monster);
         }
     }
 
