@@ -9744,7 +9744,7 @@ public class Char {
                         addGold(800);
                     } else {
                         if (user.session.getCountAttendance() < 10) { // check clone
-                            addGold(500);
+                            addGold(1000);
                         } else {
                             addGold(400);
                         }
@@ -9768,7 +9768,7 @@ public class Char {
             menus.add(new Menu(CMDMenu.EXECUTE, "Quà tân thủ", () -> {
                 addYen(100000000);
                 addCoin(100000000);
-                addGold(100000);
+                addGold(10000);
                 user.receivedFirstGift = 1;
 
             }));

@@ -604,8 +604,8 @@ public abstract class Event {
         itemsRecFromGoldItem.add(1, ItemName.RUONG_BAU_VAT);
         itemsRecFromGoldItem.add(1, ItemName.RUONG_THAN_BI);
         itemsRecFromGoldItem.add(1, ItemName.HOP_VU_KHI);
-        itemsRecFromGoldItem.add(50, ItemName.GAY_MAT_TRANG);
-        itemsRecFromGoldItem.add(50, ItemName.GAY_TRAI_TIM);
+        itemsRecFromGoldItem.add(5, ItemName.GAY_MAT_TRANG);
+        itemsRecFromGoldItem.add(5, ItemName.GAY_TRAI_TIM);
         itemsRecFromGoldItem.add(15, ItemName.BANH_RANG);
         itemsRecFromGoldItem.add(5, ItemName.BACH_HO);
         itemsRecFromGoldItem.add(5, ItemName.PHUONG_HOANG_BANG);
@@ -618,9 +618,9 @@ public abstract class Event {
         itemsRecFromGoldItem.add(2, ItemName.MAT_NA_ONI);
         itemsRecFromGoldItem.add(2, ItemName.MAT_NA_KUMA);
         itemsRecFromGoldItem.add(2, ItemName.MAT_NA_INU);
-        itemsRecFromGoldItem.add(20, ItemName.RUONG_BACH_NGAN);
-        itemsRecFromGoldItem.add(10, ItemName.RUONG_HUYEN_BI);
-        itemsRecFromGoldItem.add(30, ItemName.BAT_BAO);
+        itemsRecFromGoldItem.add(2, ItemName.RUONG_BACH_NGAN);
+        itemsRecFromGoldItem.add(1, ItemName.RUONG_HUYEN_BI);
+        itemsRecFromGoldItem.add(3, ItemName.BAT_BAO);
         itemsRecFromGoldItem.add(20, ItemName.DA_DANH_VONG_CAP_1);
         itemsRecFromGoldItem.add(15, ItemName.DA_DANH_VONG_CAP_2);
         itemsRecFromGoldItem.add(50, ItemName.DA_DANH_VONG_CAP_3);
@@ -679,8 +679,14 @@ public abstract class Event {
         itemsRecFromGoldItem.add(50, ItemName.THONG_LINH_THAO);
         itemsRecFromGoldItem.add(50, ItemName.XICH_LAN_HOA_);
         itemsRecFromGoldItem.add(50, ItemName.TAM_LUC_DIEP);
-
-
+        itemsRecFromGoldItem.add(1, ItemName.TUAN_LOC);
+        itemsRecFromGoldItem.add(1, ItemName.CUU_VI_HO_LY_SIEU_CAP);
+        itemsRecFromGoldItem.add(1, ItemName.BUA_SOCHI);
+        itemsRecFromGoldItem.add(1, ItemName.SON_TINH);
+        itemsRecFromGoldItem.add(1, ItemName.THUY_TINH);
+        itemsRecFromGoldItem.add(1, ItemName.MAT_NA_THANH_GIONG_);
+        itemsRecFromGoldItem.add(1, ItemName.CHUYEN_TINH_THACH);
+        itemsRecFromGoldItem.add(1, ItemName.TU_TINH_THACH_SO_CAP);
 
 
 
