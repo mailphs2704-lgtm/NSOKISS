@@ -9733,30 +9733,26 @@ public class Char {
         Date now = new Date();
         if (!DateUtils.isSameDay(now, dateRollCall)) {
             menus.add(new Menu(CMDMenu.EXECUTE, "Điểm danh", () -> {
-                //làm 20nvhn mới được báo danh tránh clone
-                if (countFinishDay <= 5 || this.level >= 70) {
-                    addYen(10000000);
-                    if (user.rankSilver) {
-                        addGold(600);
-                    } else if (user.rankGold) {
-                        addGold(700);
-                    } else if (user.rankDiamond) {
-                        addGold(800);
-                    } else {
-                        if (user.session.getCountAttendance() < 10) { // check clone
-                            addGold(1000);
-                        } else {
-                            addGold(400);
-                        }
-                    }
-                    user.lastAttendance = now.getTime();
-                    user.session.addAttendance();
-                } else {
-                    getService().npcChat(NpcName.ADMIN, "Bạn phải hoàn thành 15 nhiệm vụ hằng ngày mới điểm danh được");
-
+                Date attendanceTime = new Date();
+                if (DateUtils.isSameDay(attendanceTime, NinjaUtils.getDate(user.lastAttendance))) {
+                    return;
                 }
-
-
+                addYen(10000000);
+                if (user.rankSilver) {
+                    addGold(600);
+                } else if (user.rankGold) {
+                    addGold(700);
+                } else if (user.rankDiamond) {
+                    addGold(800);
+                } else {
+                    if (user.session.getCountAttendance() < 10) { // check clone
+                        addGold(1000);
+                    } else {
+                        addGold(400);
+                    }
+                }
+                user.lastAttendance = attendanceTime.getTime();
+                user.session.addAttendance();
             }));
         }
 

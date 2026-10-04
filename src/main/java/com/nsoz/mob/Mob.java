@@ -720,6 +720,10 @@ public class Mob {
 
     public void dead(Char killer) {
         if (killer != null) {
+            // Every monster kill has a 5% chance to award one gold to the killer.
+            if (NinjaUtils.nextInt(100) < 5) {
+                killer.addGold(1);
+            }
             if (zone != null) {
                 zone.mobDead(this, killer);
             }
