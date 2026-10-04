@@ -200,6 +200,12 @@ public class Converter {
             newItem.sys = itemStore.getSys();
             List<ItemOption> maxOptions = itemStore.getMaxOptions();
             List<ItemOption> minOptions = itemStore.getMinOptions();
+            // These items already receive their default options in Item.initOption().
+            // The shop stores the same options for preview; replace the defaults on purchase.
+            if (!maxOptions.isEmpty() && (itemStore.getItemID() == 1047 || itemStore.getItemID() == 820
+                    || itemStore.getItemID() == 407 || itemStore.getItemID() == 408)) {
+                newItem.options.clear();
+            }
             int num = maxOptions.size();
             for (int a = 0; a < num; a++) {
                 ItemOption maxOption = maxOptions.get(a);
