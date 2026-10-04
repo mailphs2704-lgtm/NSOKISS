@@ -404,10 +404,13 @@ public class Item {
                 this.options.add(new ItemOption(58, 25));
                 this.options.add(new ItemOption(6, 500));
             } else if (this.id == ItemName.TON_HANH_GIA) {
-                this.options.add(new ItemOption(82, 1000));
-                this.options.add(new ItemOption(87, 1000));
-                this.options.add(new ItemOption(69, 10));
-                this.options.add(new ItemOption(58, 20));
+                this.options.add(new ItemOption(125, 3000));
+                this.options.add(new ItemOption(117, 3000));
+                this.options.add(new ItemOption(94, 10));
+                this.options.add(new ItemOption(136, 100));
+                this.options.add(new ItemOption(127, 10));
+                this.options.add(new ItemOption(130, 10));
+                this.options.add(new ItemOption(131, 10));
             } else if (this.id == ItemName.CAI_TRANG_BUFFALO || this.id == ItemName.CAI_TRANG_RUBE
                     || this.id == ItemName.CAI_TRANG_FAIRIES || this.id == ItemName.CAI_TRANG_SIXGIRL) {
                 long expire = System.currentTimeMillis() + (long) (86400000 * 3);
