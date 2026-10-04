@@ -877,7 +877,7 @@ public class Mob {
                         byte type = types[index];
                         if (type == -1) {
                             if (zone.tilemap.isVDMQ()) {
-                                if (killer.isTNP && NinjaUtils.nextInt(250) < 5 || killer.isMayDo && NinjaUtils.nextInt(250) < 5) {
+                                if (killer.isTNP && NinjaUtils.nextInt(250) < 10 || killer.isMayDo && NinjaUtils.nextInt(250) < 5) {
                                     type = Mob.VDMQ;
                                 }
                                 if (killer.isKNP && NinjaUtils.nextInt(250) == 0) {
