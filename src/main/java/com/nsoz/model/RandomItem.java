@@ -165,7 +165,7 @@ public class RandomItem {
         VDMQ.add(2, ItemName.DONG_CO_V_POWER);
         VDMQ.add(2, ItemName.DINH_VI);
         VDMQ.add(2, ItemName.BINH_NITRO);
-        VDMQ.add(0.1, ItemName.CHUYEN_TINH_THACH);
+        VDMQ.add(1, ItemName.CHUYEN_TINH_THACH);
         VDMQ.add(4, ItemName.TU_TINH_THACH_SO_CAP);
         VDMQ.add(2.4, ItemName.TU_TINH_THACH_TRUNG_CAP);
         VDMQ.add(8, ItemName.LUC_THANH_HOA);
