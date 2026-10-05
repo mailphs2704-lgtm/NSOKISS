@@ -789,7 +789,7 @@ public class Mob {
                 // killer.addEventPoint(1, Events.TOP_CHUOT);
             } else if (this.template.id == MobName.BOSS_TUAN_LOC) {
                 killer.getEventPoint().addPoint(Noel.TOP_KILL_REINDEER_KING, 1);
-                killer.addExp(8000000);
+                killer.addExp(8000000 / 5);
                 if (killer.getSlotNull() == 0) {
                     return;
                 }
@@ -805,7 +805,7 @@ public class Mob {
                     if (this.template.id == MobName.KORO_KING) {
                         int itemIndex = killer.getIndexItemByIdInBag(ItemName.VIEN_THUOC_THAN_KY);
                         killer.removeItem(itemIndex, 1, true);
-                        killer.addExp(5000000);
+                        killer.addExp(5000000 / 5);
                         if (killer.getSlotNull() > 0) {
                             RandomCollection<Integer> rc = RandomItem.BUA_MAY_MAN;
                             int itemId = rc.next();

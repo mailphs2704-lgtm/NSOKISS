@@ -6570,9 +6570,10 @@ public class Char {
             if (zone.tilemap.isDungeo()) {
                 exp *= 2;
             }
+            // Reduce monster EXP to one fifth, including EXP shared with the group.
+            exp /= 5;
             // exp nhóm
             if (exp > 0) {
-                exp *= 1;
                 addExp(exp);
                 if (zone.tilemap.isDungeo()) {
                     long expGroup = exp / 30; // mặc định là chia 10
