@@ -204,7 +204,8 @@ public class Converter {
             // The shop stores the same options for preview; replace the defaults on purchase.
             if (!maxOptions.isEmpty() && (itemStore.getItemID() == 1047 || itemStore.getItemID() == 820
                     || itemStore.getItemID() == 407 || itemStore.getItemID() == 408
-                    || itemStore.getItemID() == 742 || itemStore.getItemID() == 851)) {
+                    || itemStore.getItemID() == 742 || itemStore.getItemID() == 851
+                    || itemStore.getItemID() == 799 || itemStore.getItemID() == 800)) {
                 newItem.options.clear();
             }
             int num = maxOptions.size();
