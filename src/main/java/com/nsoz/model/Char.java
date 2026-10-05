@@ -4158,6 +4158,14 @@ public class Char {
                         removeItem(item.index, 1, true);
                         return;
                     }
+                    if (item.template.name.startsWith("[REMOVED]")) {
+                        serverDialog("Vật phẩm này đã được gỡ khỏi server.");
+                        return;
+                    }
+                    if (Event.getEvent() instanceof TrungThuNew && ((TrungThuNew) Event.getEvent()).handlesItem(item.id)) {
+                        Event.getEvent().useItem(this, item);
+                        return;
+                    }
                     if ((item.template.gender == 0 || item.template.gender == 1) && item.template.gender != this.gender) {
                         return;
                     }
@@ -9672,7 +9680,6 @@ public class Char {
                         getService().npcUpdate(npc.id, 15);
                         zone.join(bot);
                         setLeading(true);
-                        eventPoint.addPoint(EventPoint.DIEM_TIEU_XAI, 1);
                     }
                 }
             }

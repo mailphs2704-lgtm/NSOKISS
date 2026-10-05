@@ -1,592 +1,482 @@
 package com.nsoz.event;
 
 import com.nsoz.constants.*;
-import com.nsoz.effect.EffectAutoDataManager;
 import com.nsoz.event.eventpoint.EventPoint;
-import com.nsoz.item.Item;
-import com.nsoz.item.ItemFactory;
-import com.nsoz.item.ItemManager;
+import com.nsoz.item.*;
 import com.nsoz.lib.RandomCollection;
-import com.nsoz.map.Map;
-import com.nsoz.map.Tree;
-import com.nsoz.map.zones.Zone;
-import com.nsoz.model.Char;
-import com.nsoz.model.InputDialog;
-import com.nsoz.model.Menu;
-import com.nsoz.model.RandomItem;
-import com.nsoz.npc.NpcFactory;
-import com.nsoz.store.ItemStore;
-import com.nsoz.store.StoreManager;
+import com.nsoz.model.*;
+import com.nsoz.option.ItemOption;
+import com.nsoz.store.*;
 import com.nsoz.util.NinjaUtils;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.stream.Collectors;
 
-import java.util.List;
-
-public class TrungThuNew extends Event {
-    public static final int HOA_PHUC_SINH = 9;
-    public static final String TOP_LONG_DEN = "release_lanterns";
-    public static final String TOP_BANH_TRUNG_THU = "use_moon_cake";
-    public static final long EXPIRE_7_DAY = 604800000L;
-    public static final long EXPIRE_30_DAY = 2592000000L;
-    private static final int DOI_BACH_HO = 0;
-    private static final int VU_KHI_THOI_TRANG_7_NGAY = 1;
-    private static final int VU_KHI_THOI_TRANG_30_NGAY = 2;
-    private static final int QUA_DAC_BIET = 9;
-    private static final int BANH_THAP_CAM = 3;
-    private static final int BANH_DEO = 4;
-    private static final int BANH_DAU_XANH = 5;
-    private static final int BANH_PIA = 6;
-    private static final int HOP_BANH_THUONG = 7;
-    private static final int HOP_BANH_THUONG_HANG = 8;
+/** Trung Thu 2026. Public reward lists; unpublished rates retain configurable local weights. */
+public class TrungThuNew extends TrungThu {
+    public static final String COMMON_USED = "tt2026_common_used";
+    public static final String PREMIUM_USED = "tt2026_premium_used";
+    public static final String LANTERNS = "tt2026_lanterns";
+    private static final String LANTERN_TIME = "tt2026_lantern_time";
+    private static final String DAILY_DATE = "tt2026_daily_date";
+    private static final int COIN = -2, YEN = -3;
+    private final RandomCollection<Integer> escortRewards = new RandomCollection<>();
+    private final RandomCollection<Integer> bossRewards = new RandomCollection<>();
+    private final List<String> skipped = new ArrayList<>();
+    private static final long DAY = 86400000L;
+    private final List<com.nsoz.server.SpawnBoss> seasonalBosses = new ArrayList<>();
+    private static final int[] CAKES = {ItemName.BANH_THAP_CAM, ItemName.BANH_DEO, ItemName.BANH_DAU_XANH, ItemName.BANH_PIA};
+    private static final int[] LANTERN_ITEMS = {ItemName.LONG_DEN_TRON, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_NGOI_SAO, ItemName.LONG_DEN_MAT_TRANG};
 
     public TrungThuNew() {
-        setId(Event.TRUNG_THU);
-        keyEventPoint.add(EventPoint.DIEM_TIEU_XAI);
-        keyEventPoint.add(TOP_BANH_TRUNG_THU);
-        keyEventPoint.add(TOP_LONG_DEN);
-        endTime.set(2023, 12, 12, 23, 59, 59);
-        itemsThrownFromMonsters.add(1, ItemName.TRUNG);
-        itemsThrownFromMonsters.add(2, ItemName.BOT_MI);
-        itemsThrownFromMonsters.add(1, ItemName.HAT_SEN);
-        itemsThrownFromMonsters.add(1, ItemName.DUONG);
-        itemsThrownFromMonsters.add(1, ItemName.DAU_XANH);
-        itemsThrownFromMonsters.add(1, ItemName.MUT);
+        keyEventPoint.clear();
+        Collections.addAll(keyEventPoint, COMMON_USED, PREMIUM_USED, LANTERNS, LANTERN_TIME, DAILY_DATE);
+        for (int id : CAKES) keyEventPoint.add("tt2026_cake_" + id);
+        endTime.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+        endTime.set(2026, Calendar.OCTOBER, 15, 23, 59, 59);
+        endTime.set(Calendar.MILLISECOND, 999);
+        populateRewards();
     }
 
-    @Override
-    public void initStore() {
-        StoreManager.getInstance().addItem((byte) StoreManager.TYPE_MISCELLANEOUS, ItemStore.builder()
-                .id(998)
-                .itemID(ItemName.GIAY_GOI_THUONG)
-                .coin(30000)
-                .expire(ConstTime.FOREVER)
-                .build());
-        StoreManager.getInstance().addItem((byte) StoreManager.TYPE_MISCELLANEOUS, ItemStore.builder()
-                .id(999)
-                .itemID(ItemName.GIAY_GOI_CAO_CAP)
-                .gold(25)
-                .expire(ConstTime.FOREVER)
-                .build());
-        StoreManager.getInstance().addItem((byte) StoreManager.TYPE_MISCELLANEOUS, ItemStore.builder()
-//                .id(665)
-                .itemID(ItemName.GIAY_THONG_HANH)
-                .gold(20)
-                .expire(ConstTime.FOREVER)
-                .build());
-        StoreManager.getInstance().addItem((byte) StoreManager.TYPE_MISCELLANEOUS, ItemStore.builder()
-//                .id(665)
-                .itemID(ItemName.LONG_DEN)
-                .coin(120000)
-                .expire(ConstTime.FOREVER)
-                .build());
+    @Override public EventPoint createEventPoint() {
+        EventPoint ep = new EventPoint(); ep.addIfMissing(keyEventPoint); return ep;
     }
+    private synchronized int nextLanternOrder() {
+        return eventPoints.stream().mapToInt(e -> e.getPoint(LANTERN_TIME)).max().orElse(0) + 1;
+    }
+    // Event's constructor calls this before subclass initialization: populate only after construction.
+    @Override public void initRandomItem() { }
 
-    @Override
-    public void useItem(Char _char, Item item) {
-        if (item.id == ItemName.HOP_BANH_THUONG || item.id == ItemName.HOP_BANH_THUONG_HANG) {
-            if (_char.getSlotNull() == 0) {
-                _char.warningBagFull();
-                return;
-            }
-            RandomCollection<Integer> rc = item.id == ItemName.HOP_BANH_THUONG ? itemsRecFromCoinItem : itemsRecFromGold2Item;
-            boolean isDone = useEventItem(_char, item.id, rc);
-        } else if (item.id == ItemName.LONG_DEN) {
-            if (_char.getSlotNull() == 0) {
-                _char.warningBagFull();
-                return;
-            }
-            boolean isDone = useEventItem(_char, item.id, itemsRecFromGold2Item);
-            if (isDone) {
-                _char.getEventPoint().addPoint(TrungThuNew.TOP_LONG_DEN, 1);
-                _char.getEventPoint().addPoint(EventPoint.DIEM_TIEU_XAI, 1);
-            }
-            _char.zone.getService().addEffectAuto((byte) 7, (short) _char.x, _char.y, (byte) 0, (short) 1);
+    private boolean available(int id) {
+        try {
+            ItemTemplate t = ItemManager.getInstance().getItemTemplate(id);
+            return t != null && t.id == id && !t.name.toLowerCase(Locale.ROOT).contains("obito")
+                    && !t.name.toLowerCase(Locale.ROOT).contains("sakura") && !t.name.startsWith("[REMOVED]");
+        } catch (IndexOutOfBoundsException e) { return false; }
+    }
+    private void add(RandomCollection<Integer> pool, int... ids) {
+        for (int id : ids) {
+            if (id < 0 || available(id)) pool.add(10, id);
+            else skipped.add("item " + id);
         }
     }
-
-    @Override
-    public void action(Char p, int type, int amount) {
-        switch (type) {
-            case BANH_THAP_CAM:
-                banhThapCam(p, amount);
-                break;
-            case BANH_DAU_XANH:
-                banhDauXanh(p, amount);
-                break;
-            case BANH_DEO:
-                banhDeo(p, amount);
-                break;
-            case BANH_PIA:
-                banhPia(p, amount);
-                break;
-            case HOP_BANH_THUONG:
-                hopBanhThuong(p, amount);
-                break;
-            case HOP_BANH_THUONG_HANG:
-                hopBanhThuongHang(p, amount);
-                break;
-            case HOA_PHUC_SINH:
-                hoaPhucSinh(p, amount);
-                break;
-            case DOI_BACH_HO:
-                doiBachHo(p);
-                break;
-            case VU_KHI_THOI_TRANG_7_NGAY:
-                doiVuKhiThoiTrang(p, ItemName.BANH_TRUNG_THU_PHONG_LOI, 10, EXPIRE_7_DAY);
-                break;
-            case VU_KHI_THOI_TRANG_30_NGAY:
-                doiVuKhiThoiTrang(p, ItemName.BANH_TRUNG_THU_BANG_HOA, 20, EXPIRE_30_DAY);
-                break;
+    private void rare(RandomCollection<Integer> pool, int... ids) {
+        for (int id : ids) if (available(id)) pool.add(1, id); else skipped.add("item " + id);
+    }
+    private void optional(RandomCollection<Integer> pool, String... names) {
+        for (String name : names) {
+            int id = findItem(name);
+            if (id >= 0) pool.add(1, id); else skipped.add(name);
         }
     }
-
-    public void doiBachHo(Char p) {
-        int amount = 10;
-        List<Item> list = p.getListItemByID(ItemName.BANH_TRUNG_THU_PHONG_LOI);
-        if (list.size() < amount) {
-            p.getService().npcChat(NpcName.TIEN_NU, "Không đủ Bánh trung thu phong lôi");
-            return;
+    private int findItem(String name) {
+        for (int id = 0; id < 3000; id++) {
+            try {
+                ItemTemplate t = ItemManager.getInstance().getItemTemplate(id);
+                if (t.id == id && t.name.equalsIgnoreCase(name) && available(id)) return id;
+            } catch (IndexOutOfBoundsException e) { break; }
         }
+        return -1;
+    }
+    private void populateRewards() {
+        add(itemsRecFromCoinItem, ItemName.BANH_TRUNG_THU_PHONG_LOI, ItemName.BANH_TRUNG_THU_BANG_HOA,
+            ItemName.THE_BAI_KINH_NGHIEM_GIA_TOC_SO, ItemName.THE_BAI_KINH_NGHIEM_GIA_TOC_TRUNG,
+            ItemName.DA_DANH_VONG_CAP_1, ItemName.DA_DANH_VONG_CAP_2, ItemName.MANH_GIAY_JIRAI_,
+            ItemName.MANH_DAY_CHUYEN_JIRAI_, ItemName.MANH_GIAY_JUMITO, ItemName.MANH_DAY_CHUYEN_JUMITO,
+            ItemName.MANH_NGOC_BOI_JIRAI_, ItemName.MANH_NGOC_BOI_JUMITO, ItemName.BAT_BAO,
+            ItemName.RUONG_BACH_NGAN, ItemName.RUONG_HUYEN_BI, ItemName.LANG_HON_THAO, ItemName.LANG_HON_MOC,
+            ItemName.TUONG_LINH_THAO, ItemName.THONG_LINH_THAO, ItemName.HOA_TUYET, ItemName.NHAM_THACH_, ItemName.PHA_LE);
+        rare(itemsRecFromCoinItem, ItemName.LONG_DEN_TRON, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_NGOI_SAO,
+            ItemName.LONG_DEN_MAT_TRANG, ItemName.MAT_NA_SUPER_BROLY, ItemName.MAT_NA_VEGETA,
+            ItemName.MAT_NA_ONNA_BUGEISHA, ItemName.MAT_NA_KUNOICHI, ItemName.NGU_HANH_HOA, ItemName.KIM_THAC_HO_PHU);
+        optional(itemsRecFromCoinItem, "Quả chakra xanh", "Minh Giác Cốt Ngọc Hạ Giáp", "Minh Giác Táng Hồn Dao");
+        add(itemsRecFromGoldItem, ItemName.RUONG_BACH_NGAN, ItemName.RUONG_HUYEN_BI, ItemName.BAT_BAO,
+            ItemName.BANH_TRUNG_THU_PHONG_LOI, ItemName.BANH_TRUNG_THU_BANG_HOA,
+            ItemName.NHAM_THACH_, ItemName.PHA_LE, ItemName.HOA_TUYET, ItemName.LONG_LUC_DAN,
+            ItemName.MINH_MAN_DAN, ItemName.KHANG_THE_DAN, ItemName.SINH_MENH_DAN,
+            ItemName.MANH_GIAY_JIRAI_, ItemName.MANH_DAY_CHUYEN_JIRAI_, ItemName.MANH_GIAY_JUMITO,
+            ItemName.MANH_DAY_CHUYEN_JUMITO, ItemName.TU_TINH_THACH_SO_CAP, ItemName.TU_TINH_THACH_TRUNG_CAP,
+            ItemName.BAO_HIEM_SO_CAP, ItemName.MANH_PHU_JIRAI_, ItemName.MANH_PHU_JUMITO, COIN);
+        rare(itemsRecFromGoldItem, ItemName.LONG_DEN_TRON, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_NGOI_SAO,
+            ItemName.LONG_DEN_MAT_TRANG, ItemName.HAKAIRO_YOROI, ItemName.LAN_SU_VU, ItemName.GA_TAY,
+            ItemName.TOM_HUM, ItemName.CHIM_TINH_ANH, ItemName.VI_THU_LENH, ItemName.MAT_NA_THO,
+            ItemName.MAT_NA_THO_NU, ItemName.MAT_NA_KUMA, ItemName.MAT_NA_INU, ItemName.KIM_THAC_DI_TRAO);
+        optional(itemsRecFromGoldItem, "Quả chakra xanh", "Quả chakra vàng", "Bảo hiểm dung hợp");
+        add(itemsRecFromGold2Item, ItemName.TRUNG, ItemName.BOT_MI, ItemName.HAT_SEN, ItemName.DUONG,
+            ItemName.DAU_XANH, ItemName.MUT, ItemName.DA_CAP_5, ItemName.DA_CAP_6, ItemName.DA_CAP_7,
+            ItemName.DA_CAP_8, ItemName.LUC_NGOC, ItemName.BANH_RANG, ItemName.MANH_GIAY_VUN,
+            ItemName.BINH_MP_CAO_CAP, ItemName.BINH_HP_CAO_CAP, ItemName.HOA_TUYET, ItemName.NHAM_THACH_,
+            ItemName.PHA_LE, ItemName.MANH_NGOC_BOI_JIRAI_, ItemName.MANH_NGOC_BOI_JUMITO,
+            ItemName.THONG_LINH_THAO, ItemName.KIM_TUOC_THAO, ItemName.TU_HOA_DIA_DINH,
+            ItemName.LONG_LUC_DAN, ItemName.MINH_MAN_DAN, ItemName.KHANG_THE_DAN, ItemName.SINH_MENH_DAN,
+            ItemName.DA_DANH_VONG_CAP_1, ItemName.DA_DANH_VONG_CAP_2, ItemName.MANH_NHAN_JIRAI_, ItemName.MANH_NHAN_JUMITO, COIN, YEN);
+        rare(itemsRecFromGold2Item, ItemName.HOAN_LUONG_CHI_THAO, ItemName.HAGGIS, ItemName.TUI_VAI_CAP_4,
+            ItemName.GAY_MAT_TRANG, ItemName.GAY_TRAI_TIM);
+        optional(itemsRecFromGold2Item, "Quả chakra xanh", "Quả chakra vàng", "Lồng đèn rồng",
+            "Minh Giác Cốt Ngọc Tuyến", "Minh Giác Cốt Ngọc Trâm", "Minh Giác Thiên Hỏa Tiêu");
+        add(escortRewards, ItemName.BI_KIP_KIEM_THUAT, ItemName.BI_KIP_TIEU_THUAT, ItemName.BI_KIP_KUNAI,
+            ItemName.BI_KIP_CUNG, ItemName.BI_KIP_DAO, ItemName.BI_KIP_QUAT, ItemName.GA_TAY, ItemName.TOM_HUM,
+            ItemName.THE_BAI_KINH_NGHIEM_GIA_TOC_TRUNG, ItemName.DIA_LANG_THAO, ItemName.TAM_LUC_DIEP,
+            ItemName.CHIM_TINH_ANH, ItemName.HOAN_COT_CHI_CHU_SO_CAP, ItemName.BAO_HIEM_TRUNG_CAP,
+            ItemName.BAO_HIEM_CAO_CAP, ItemName.LINH_LANG_HO_DIEP, ItemName.CHUYEN_TINH_THACH,
+            ItemName.BO_CAI_THIEN_GIAM_XOC, ItemName.BO_CAI_THIEN_DANH_LUA, ItemName.BO_CAI_THIEN_DONG_CO,
+            ItemName.KHI_BAO, ItemName.LANG_BAO, ItemName.BANH_RANG, ItemName.THUOC_CAI_TIEN,
+            ItemName.KIM_TUOC_THAO, ItemName.TU_HOA_DIA_DINH, ItemName.NGU_HANH_HOA,
+            ItemName.KHANG_THE_DAN, ItemName.SINH_MENH_DAN, ItemName.MINH_MAN_DAN, ItemName.LONG_LUC_DAN,
+            ItemName.DA_CAP_6, ItemName.DA_CAP_7, COIN, YEN);
+        rare(escortRewards, ItemName.THAI_DUONG_VO_CUC_KIEM, ItemName.THAI_DUONG_TANG_HON_DAO,
+            ItemName.THAI_DUONG_CHIEN_LUC_DAO, ItemName.THAI_DUONG_THIEN_HOA_TIEU,
+            ItemName.THAI_DUONG_BANG_THAN_CUNG, ItemName.THAI_DUONG_HOANG_PHONG_PHIEN,
+            ItemName.XE_MAY, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_NGOI_SAO,
+            ItemName.LONG_DEN_TRON, ItemName.XICH_NHAN_NGAN_LANG, ItemName.HARLEY_DAVIDSON, ItemName.TUYET_SA_NGU);
+        optional(escortRewards, "IK", "Dung dịch cải tạo", "Minh Giác Vô Cực Kiếm", "Minh Giác Chiến Lục Đao", "Minh Giác Hoàng Phong Phiến");
+        add(bossRewards, ItemName.XICH_NHAN_NGAN_LANG, ItemName.DA_CAP_6, ItemName.HAGGIS, YEN,
+            ItemName.THAI_DUONG_COT_NGOC_PHU, ItemName.THAI_DUONG_COT_NGOC_BOI,
+            ItemName.THAI_DUONG_COT_NGOC_GIOI, ItemName.THAI_DUONG_COT_NGOC_LIEN);
+        optional(bossRewards, "Phiếu may mắn", "Minh Giác Cốt Ngọc Giới", "Minh Giác Băng Thần Cung");
+    }
 
-        for (Item item : list.subList(0, amount)) {
-            p.removeItem(item.index, 1, true);
-        }
-        Item item = ItemFactory.getInstance().newItem(ItemName.BACH_HO);
-        item.setQuantity(1);
+    public List<String> getSkippedRewards() { return skipped.stream().distinct().sorted().collect(Collectors.toList()); }
+    private boolean active(Char p) {
+        if (!isEnded()) return true;
+        p.serverDialog("Sự kiện Trung Thu đã kết thúc."); return false;
+    }
+    private Item rewardItem(int id, long days) {
+        Item item;
+        if (id >= 632 && id <= 637) item = ItemFactory.getInstance().newItem9X(id);
+        else if ((id >= 1111 && id <= 1116) || (id >= 1163 && id <= 1176)) item = ItemFactory.getInstance().newItem10X(id);
+        else item = ItemFactory.getInstance().newItem(id);
         item.isLock = false;
-        item.expire = System.currentTimeMillis() + EXPIRE_30_DAY;
-        p.addItemToBag(item);
+        item.initExpire();
+        if (days != 0) item.expire = days < 0 ? -1 : System.currentTimeMillis() + days * DAY;
+        // Source's initExpire omits some event masks and lantern variants.
+        if (days == 0 && (isLantern(id) || id == ItemName.MAT_NA_VEGETA || id == ItemName.MAT_NA_KUNOICHI
+                || (id >= 1111 && id <= 1116) || (id >= 1163 && id <= 1176)
+                || id == ItemName.HAKAIRO_YOROI || id == ItemName.MAT_NA_THO || id == ItemName.MAT_NA_THO_NU))
+            item.expire = System.currentTimeMillis() + 3 * DAY;
+        return item;
     }
-
-    public void doiVuKhiThoiTrang(Char p, int itemID, int amount, long expire) {
-        List<Item> list = p.getListItemByID(itemID);
-        if (list.size() < amount) {
-            p.getService().npcChat(NpcName.TIEN_NU, "Không đủ " + ItemManager.getInstance().getItemName(itemID));
-            return;
-        }
-
-        for (Item item : list.subList(0, amount)) {
+    private boolean isLantern(int id) { for (int i : LANTERN_ITEMS) if (i == id) return true; return false; }
+    public boolean handlesItem(int id) {
+        for (int cake : CAKES) if (id == cake) return true;
+        return id == ItemName.HOP_BANH_THUONG || id == ItemName.HOP_BANH_THUONG_HANG || id == ItemName.LONG_DEN;
+    }
+    private void give(Char p, int id, boolean premium) {
+        if (id == COIN) { p.addCoin(1000000); return; }
+        if (id == YEN) { p.addYen(1000000); return; }
+        Item prize = rewardItem(id, 0);
+        if (premium && isLantern(id) && NinjaUtils.nextInt(10000) == 0) prize.expire = -1;
+        if (id == ItemName.BOT_MI || id == ItemName.TRUNG || id == ItemName.HAT_SEN || id == ItemName.DUONG
+            || id == ItemName.DAU_XANH || id == ItemName.MUT) prize.isLock = true;
+        if (id == ItemName.THONG_LINH_THAO) prize.setQuantity(NinjaUtils.nextInt(5, 10));
+        p.addItemToBag(prize);
+    }
+    @Override public void useItem(Char p, Item item) {
+        if (!active(p)) return;
+        for (int cake : CAKES) if (item.id == cake) {
+            EventPoint ep = p.getEventPoint();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+            dateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+            int today = Integer.parseInt(dateFormat.format(new Date()));
+            if (ep.getPoint(DAILY_DATE) != today) {
+                ep.setPoint(DAILY_DATE, today);
+                for (int id : CAKES) ep.setPoint("tt2026_cake_" + id, 0);
+            }
+            String key = "tt2026_cake_" + cake;
+            if (ep.getPoint(key) >= 1500) { p.serverDialog("Mỗi ngày chỉ dùng 1.500 bánh mỗi loại."); return; }
             p.removeItem(item.index, 1, true);
+            ep.addPoint(key, 1);
+            p.addExp(NinjaUtils.nextInt(10000000, 15000000)); return;
         }
-
-        if (p.gender == 1) {
-            itemID = ItemName.GAY_MAT_TRANG;
+        if (p.getSlotNull() == 0) { p.warningBagFull(); return; }
+        RandomCollection<Integer> pool;
+        String counter;
+        if (item.id == ItemName.HOP_BANH_THUONG) { pool = itemsRecFromCoinItem; counter = COMMON_USED; }
+        else if (item.id == ItemName.HOP_BANH_THUONG_HANG) { pool = itemsRecFromGoldItem; counter = PREMIUM_USED; }
+        else if (item.id == ItemName.LONG_DEN) { pool = itemsRecFromGold2Item; counter = LANTERNS; }
+        else return;
+        int prize = pool.next();
+        p.removeItem(item.index, 1, true);
+        if (item.id != ItemName.LONG_DEN) p.addExp(NinjaUtils.nextInt(10000000, 15000000));
+        give(p, prize, item.id == ItemName.HOP_BANH_THUONG_HANG);
+        p.getEventPoint().addPoint(counter, 1);
+        if (counter.equals(LANTERNS)) {
+            p.getEventPoint().setPoint(LANTERN_TIME, nextLanternOrder());
+            p.zone.getService().addEffectAuto((byte) 7, (short) p.x, p.y, (byte) 0, (short) 1);
+        }
+    }
+    @Override public boolean makeEventItem(Char p, int number, int[][] requires, int gold, int coin, int yen, int output) {
+        if (!active(p) || number < 1 || number > 1000) { p.serverDialog("Số lượng từ 1 đến 1.000."); return false; }
+        if (!available(output)) { p.serverDialog("Thiếu dữ liệu vật phẩm."); return false; }
+        if (p.getSlotNull() < (ItemManager.getInstance().getItemTemplate(output).isUpToUp ? 1 : number)) { p.warningBagFull(); return false; }
+        if (p.yen < number * yen || p.coin < number * coin || p.user.gold < number * gold) { p.serverDialog("Không đủ tiền làm bánh."); return false; }
+        for (int[] requirement : requires) if (p.getQuantityItemById(requirement[0]) < requirement[1] * number) { p.serverDialog("Không đủ nguyên liệu."); return false; }
+        p.addYen(-number * yen); p.addCoin(-number * coin); p.addGold(-number * gold);
+        for (int[] requirement : requires) {
+            int left = requirement[1] * number;
+            for (Item item : p.getListItemByID(requirement[0])) {
+                int take = Math.min(left, item.getQuantity()); p.removeItem(item.index, take, true); left -= take; if (left == 0) break;
+            }
+        }
+        boolean locked = output != ItemName.HOP_BANH_THUONG && output != ItemName.HOP_BANH_THUONG_HANG;
+        if (ItemManager.getInstance().getItemTemplate(output).isUpToUp) {
+            Item item = ItemFactory.getInstance().newItem(output); item.setQuantity(number); item.isLock = locked; p.addItemToBag(item);
         } else {
-            itemID = ItemName.GAY_TRAI_TIM;
+            for (int i = 0; i < number; i++) { Item item = ItemFactory.getInstance().newItem(output); item.isLock = locked; p.addItemToBag(item); }
         }
-        Item item = ItemFactory.getInstance().newItem(itemID);
-        item.setQuantity(1);
-        item.isLock = false;
-        if (expire == -1) {
-            item.expire = -1;
-        } else {
-            item.expire = System.currentTimeMillis() + expire;
+        return true;
+    }
+    @Override public void banhThapCam(Char p, int amount) { if (active(p)) super.banhThapCam(p, amount); }
+    @Override public void banhDeo(Char p, int amount) { if (active(p)) super.banhDeo(p, amount); }
+    @Override public void banhDauXanh(Char p, int amount) { if (active(p)) super.banhDauXanh(p, amount); }
+    @Override public void banhPia(Char p, int amount) { if (active(p)) super.banhPia(p, amount); }
+    @Override public void hopBanhThuong(Char p, int amount) { if (active(p)) super.hopBanhThuong(p, amount); }
+    @Override public void hopBanhThuongHang(Char p, int amount) { if (active(p)) super.hopBanhThuongHang(p, amount); }
+    private void exchange(Char p, int input, int amount, int output, long days) {
+        if (!active(p) || !available(output)) return;
+        if (p.getSlotNull() < 1) { p.warningBagFull(); return; }
+        if (p.getQuantityItemById(input) < amount) { p.serverDialog("Không đủ bánh đổi quà."); return; }
+        // Consume across stacks, rather than counting inventory slots as cakes.
+        int remaining = amount;
+        for (Item item : p.getListItemByID(input)) {
+            int take = Math.min(remaining, item.getQuantity()); p.removeItem(item.index, take, true);
+            remaining -= take; if (remaining == 0) break;
         }
-        p.addItemToBag(item);
+        Item prize = rewardItem(output, days);
+        if (output == ItemName.BACH_HO) { prize.sys = 4; prize.randomOptionMount(); }
+        p.addItemToBag(prize);
     }
-
-    public void banhThapCam(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.BOT_MI, 10}, {ItemName.TRUNG, 5}, {ItemName.DUONG, 5}, {ItemName.DAU_XANH, 5}};
-        int itemIdReceive = ItemName.BANH_THAP_CAM;
-        makeEventItem(p, amount, itemRequires, 0, 0, 15000, itemIdReceive);
+    @Override public void doiBachHo(Char p) { exchange(p, ItemName.BANH_TRUNG_THU_PHONG_LOI, 30, ItemName.BACH_HO, 30); }
+    @Override public void doiVuKhiThoiTrang(Char p, int id, int amount, long expire) {
+        exchange(p, id, expire == EXPIRE_30_DAY ? 30 : 10,
+            p.gender == 1 ? ItemName.GAY_MAT_TRANG : ItemName.GAY_TRAI_TIM, expire / DAY);
     }
-
-    public void banhDeo(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.BOT_MI, 10}, {ItemName.TRUNG, 5}, {ItemName.DUONG, 5}, {ItemName.DAU_XANH, 5}};
-        int itemIdReceive = ItemName.BANH_DEO;
-        makeEventItem(p, amount, itemRequires, 0, 0, 15000, itemIdReceive);
+    @Override public void doiLongDen(Char p, byte type, int index) {
+        if (!active(p)) return;
+        List<Item> list = p.getListItemByID(LANTERN_ITEMS);
+        if (index < 0 || index >= list.size()) return;
+        Item old = list.get(index);
+        long eventStart = java.time.ZonedDateTime.of(2026, 9, 22, 15, 0, 0, 0, java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().toEpochMilli(); // 2026-09-22 15:00 Asia/Ho_Chi_Minh
+        if (old.getCreatedAt() < eventStart) { p.serverDialog("Chỉ đổi lồng đèn tạo trong Trung Thu 2026."); return; }
+        int cost = type == DOI_BANG_LUONG ? 5 : 500000;
+        if ((type == DOI_BANG_LUONG ? p.user.gold : p.coin) < cost) { p.serverDialog("Không đủ tiền đổi lồng đèn."); return; }
+        int out = DOI_PHAN_TU.next();
+        if (!available(out)) { p.serverDialog("Thiếu dữ liệu lồng đèn thời trang."); return; }
+        Item prize = rewardItem(out, -1);
+        prize.options.clear();
+        for (ItemOption o : old.options) prize.options.add(new ItemOption(o.optionTemplate.id, o.param));
+        if (!old.isForever()) prize.expire = Math.max(System.currentTimeMillis(), old.expire) + EXPIRE_30_DAY;
+        if (type == DOI_BANG_LUONG) {
+            if (NinjaUtils.nextInt(200) == 0) {
+                prize.options.removeIf(o -> o.optionTemplate.id == ItemOptionName.MIEN_GIAM_SAT_THUONG_POINT_PERCENT_TYPE_8);
+                prize.options.add(new ItemOption(ItemOptionName.MIEN_GIAM_SAT_THUONG_POINT_PERCENT_TYPE_8, 100));
+            }
+            prize.options.add(new ItemOption(ItemOptionName.KHONG_NHAN_EXP_TYPE_0, 1));
+            p.addGold(-cost);
+        } else p.addCoin(-cost);
+        p.removeItem(old.index, 1, true); p.addItemToBag(prize); p.getService().endDlg(true);
     }
-
-    public void banhDauXanh(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.BOT_MI, 10}, {ItemName.TRUNG, 5}, {ItemName.DUONG, 5}, {ItemName.DAU_XANH, 5}};
-        int itemIdReceive = ItemName.BANH_DAU_XANH;
-        makeEventItem(p, amount, itemRequires, 0, 0, 15000, itemIdReceive);
+    @Override public void escortFinish(Char p) {
+        if (!active(p)) return;
+        if (p.getSlotNull() == 0) { p.warningBagFull(); return; }
+        p.addExp(15000000); give(p, escortRewards.next(), false);
     }
+    public int randomBossReward() { return bossRewards.next(); }
+    public void bossReward(Char p) { if (p.getSlotNull() > 0) give(p, randomBossReward(), false); }
 
-    public void banhPia(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.BOT_MI, 10}, {ItemName.TRUNG, 5}, {ItemName.DUONG, 5}, {ItemName.DAU_XANH, 5}};
-        int itemIdReceive = ItemName.BANH_PIA;
-        makeEventItem(p, amount, itemRequires, 0, 0, 15000, itemIdReceive);
+    @Override public void initMap(com.nsoz.map.zones.Zone zone) {
+        super.initMap(zone);
+        if (zone.map.id == MapName.TRUONG_HIROSAKI && zone.getNpc(NpcName.LONG_DEN_2) == null)
+            zone.addNpc(com.nsoz.npc.NpcFactory.getInstance().newNpc(99, NpcName.LONG_DEN_2, 1307, 168, 0));
     }
-
-    public void hopBanhThuong(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.GIAY_GOI_THUONG, 1}, {ItemName.BANH_THAP_CAM, 1}, {ItemName.BANH_DEO, 1}, {ItemName.BANH_DAU_XANH, 1}, {ItemName.BANH_PIA, 1}};
-        int itemIdReceive = ItemName.HOP_BANH_THUONG;
-        boolean checkt = makeEventItem(p, amount, itemRequires, 0, 0, 0, itemIdReceive);
-        if (checkt) {
-//            p.getEventPoint().addPoint(TrungThuNew.TOP_BANH_TRUNG_THU, amount);
-//            p.getEventPoint().addPoint(EventPoint.DIEM_TIEU_XAI, amount);
+    private void spawnSeasonalBosses() {
+        if (!Event.isTrungThu()) return;
+        for (com.nsoz.server.SpawnBoss boss : seasonalBosses) if (boss.getCurrMonster() != null) boss.getCurrMonster().die();
+        seasonalBosses.clear();
+        int[] maps = {MapName.RUNG_DAO_SAKURA, MapName.RUNG_TRUC_UTRA, MapName.RUNG_MISHIMA,
+            MapName.RUNG_AOKIGAHARA, MapName.DOI_FUMIMEN, MapName.DOI_KOKORO, MapName.CANH_DONG_FUKI,
+            MapName.SUOI_AKAGI, MapName.RUNG_MOSHIO, MapName.HANG_MEIRO, MapName.CANH_DONG_HIYA,
+            MapName.HEM_NUI_TAKANA, MapName.DEN_AMATERASU, MapName.RUNG_KANASHII,
+            MapName.CUA_BIEN_KAWAGUCHI, MapName.DONG_HACHI, MapName.RUNG_GIA};
+        List<Integer> candidates = new ArrayList<>(); for (int id : maps) candidates.add(id);
+        Collections.shuffle(candidates);
+        for (int mobId : new int[]{MobName.HOA_KY_LAN, MobName.TU_HA_MA_THAN}) {
+            for (int mapId : new ArrayList<>(candidates)) {
+                com.nsoz.map.Map map = com.nsoz.map.MapManager.getInstance().find(mapId);
+                if (map == null || map.getZones().isEmpty()) continue;
+                List<com.nsoz.mob.Mob> mobs = map.getZones().get(0).getLivingMonsters();
+                if (mobs.isEmpty()) continue;
+                com.nsoz.mob.Mob position = mobs.get(NinjaUtils.nextInt(mobs.size()));
+                com.nsoz.server.SpawnBoss boss = new com.nsoz.server.SpawnBoss(2026, map, position.x, position.y);
+                boss.add(1, mobId); boss.spawn(); seasonalBosses.add(boss); candidates.remove(Integer.valueOf(mapId)); break;
+            }
         }
     }
-
-    public void hopBanhThuongHang(Char p, int amount) {
-        int[][] itemRequires = new int[][]{{ItemName.GIAY_GOI_CAO_CAP, 1}, {ItemName.BANH_THAP_CAM, 1}, {ItemName.BANH_DEO, 1}, {ItemName.BANH_DAU_XANH, 1}, {ItemName.BANH_PIA, 1}};
-        int itemIdReceive = ItemName.HOP_BANH_THUONG_HANG;
-        boolean check = makeEventItem(p, amount, itemRequires, 0, 0, 0, itemIdReceive);
-        if (check) {
-            p.getEventPoint().addPoint(TrungThuNew.TOP_BANH_TRUNG_THU, amount);
-            p.getEventPoint().addPoint(EventPoint.DIEM_TIEU_XAI, amount);
+    @Override public void initStore() {
+        if (isEnded()) return;
+        for (int hour : new int[]{12, 19, 21, 23}) {
+            java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+            java.time.ZonedDateTime next = now.withHour(hour).withMinute(0).withSecond(0).withNano(0);
+            if (!next.isAfter(now)) next = next.plusDays(1);
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(
+                this::spawnSeasonalBosses, java.time.Duration.between(now, next).getSeconds(), 86400, java.util.concurrent.TimeUnit.SECONDS);
         }
+        store(StoreManager.TYPE_FOOD, ItemName.GIAY_GOI_THUONG, 30000, 0);
+        store(StoreManager.TYPE_FOOD, ItemName.LONG_DEN, 120000, 0);
+        store(StoreManager.TYPE_MISCELLANEOUS, ItemName.GIAY_GOI_CAO_CAP, 0, 25);
+        store(StoreManager.TYPE_MISCELLANEOUS, ItemName.GIAY_THONG_HANH, 0, 20);
+        for (int id : new int[]{ItemName.NHAT_TU_LAM_PHONG, ItemName.THIEN_NGUYET_CHI_NU})
+            if (available(id)) StoreManager.getInstance().addItem(StoreManager.TYPE_MISCELLANEOUS,
+                ItemStore.builder().id(20000 + id).itemID(id).gold(100).isLock(true).expire(15 * DAY).options(new ArrayList<>()).build());
     }
-
-    public void doiHoaPhucSinh(Char p, int type) {
-        int point = type == 1 ? 10000 : 10000;
-        if (p.getEventPoint().getPoint(EventPoint.DIEM_TIEU_XAI) < point) {
-            p.getService().npcChat(NpcName.TIEN_NU,
-                    "Bạn cần tối thiểu " + NinjaUtils.getCurrency(point) + " điểm sự kiện mới có thể đổi được vật này.");
-            return;
-        }
-
-        if (p.getSlotNull() == 0) {
-            p.getService().npcChat(NpcName.TIEN_NU, p.language.getString("BAG_FULL"));
-            return;
-        }
-
-        Item item = ItemFactory.getInstance().newItem(type == 1 ? ItemName.HOA_THIEN_DIEU : ItemName.HOA_DA_YEN);
-        p.addItemToBag(item);
-        p.getEventPoint().subPoint(EventPoint.DIEM_TIEU_XAI, point);
+    private void store(byte tab, int id, int coin, int gold) {
+        if (available(id)) StoreManager.getInstance().addItem(tab, ItemStore.builder().id(20000 + id)
+            .itemID(id).coin(coin).gold(gold).expire(-1).options(new ArrayList<>()).build());
     }
-
-    public void hoaPhucSinh(Char _char, int itemId) {
-        if (_char.getSlotNull() == 0) {
-            _char.warningBagFull();
-            return;
-        }
-
-        int itemIndex = _char.getIndexItemByIdInBag(itemId);
-
-        if (itemIndex != -1) {
-            RandomCollection<Integer> rc = RandomItem.LINH_VAT;
-            useVipEventItem(_char, itemId == ItemName.HOA_THIEN_DIEU ? 1 : 2, rc);
-            _char.removeItem(itemIndex, 1, true);
-        } else {
-            _char.getService().npcChat((short) NpcName.KIRIKO, "Hãy tìm đúng loài hoa rồi đến gặp ta");
-        }
+    private void input(Char p, String title, java.util.function.IntConsumer action) {
+        p.setInput(new InputDialog(CMDInputDialog.EXECUTE, title, () -> {
+            try { action.accept(p.getInput().intValue()); } catch (NumberFormatException e) { p.inputInvalid(); }
+        })); p.getService().showInputDialog();
     }
-
-    public void escortFinish(Char p) {
-        RandomCollection<Integer> rc = itemsRecFromGold2Item;
-        p.addExp(15000000);
-        int itemId = rc.next();
-        Item itm = ItemFactory.getInstance().newItem(itemId);
-        itm.initExpire();
-        if (itm.id == ItemName.THONG_LINH_THAO) {
-            itm.setQuantity(NinjaUtils.nextInt(5, 10));
-        }
-        p.addItemToBag(itm);
-    }
-
-    @Override
-    public void menu(Char p) {
+    private void menuItem(Char p, String title, Runnable action) { p.menus.add(new Menu(CMDMenu.EXECUTE, title, action)); }
+    @Override public void menu(Char p) {
         p.menus.clear();
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Làm bánh", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bánh Thập Cẩm", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Bánh Thập Cẩm", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, BANH_THAP_CAM, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bánh Dẻo", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Bánh Dẻo", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, BANH_DEO, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bánh Đậu xanh", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Bánh Đậu xanh", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, BANH_DAU_XANH, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bánh Pía", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Bánh Pía", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, BANH_PIA, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-            }));
-            p.getService().openUIMenu();
-        }));
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Làm hộp bánh", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Hộp bánh thường", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Hộp bánh thường", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, HOP_BANH_THUONG, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Hộp bánh thượng hạng", () -> {
-                p.setInput(new InputDialog(CMDInputDialog.EXECUTE, "Hộp bánh thượng hạng", () -> {
-                    InputDialog input = p.getInput();
-                    try {
-                        int number = input.intValue();
-                        action(p, HOP_BANH_THUONG_HANG, number);
-                    } catch (Exception e) {
-                        if (!input.isEmpty()) {
-                            p.inputInvalid();
-                        }
-                    }
-                }));
-                p.getService().showInputDialog();
-            }));
-            p.getService().openUIMenu();
-        }));
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Đổi quà", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bạch hổ 30 ngày", () -> {
-                action(p, DOI_BACH_HO, 1);
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Vũ khí thời trang 7 ngày", () -> {
-                action(p, VU_KHI_THOI_TRANG_7_NGAY, 1);
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Vũ khí thời trang 30 ngày", () -> {
-                action(p, VU_KHI_THOI_TRANG_30_NGAY, 1);
-            }));
-            p.getService().openUIMenu();
-        }));
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Đổi lồng đèn", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "10.000.000 xu", () -> {
-                p.setCommandBox(Char.DOI_LONG_DEN_XU);
-                List<Item> list = p.getListItemByID(ItemName.LONG_DEN_TRON, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_MAT_TRANG, ItemName.LONG_DEN_NGOI_SAO);
-                p.getService().openUIShopTrungThu(list, "Đổi lồng đèn 10 triệu xu", "Đổi");
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "25000 lượng", () -> {
-                p.setCommandBox(Char.DOI_LONG_DEN_LUONG);
-
-                List<Item> list = p.getListItemByID(ItemName.LONG_DEN_TRON, ItemName.LONG_DEN_CA_CHEP, ItemName.LONG_DEN_MAT_TRANG, ItemName.LONG_DEN_NGOI_SAO);
-                p.getService().openUIShopTrungThu(list, "Đổi lồng đèn 25000 lượng", "Đổi");
-            }));
-            p.getService().openUIMenu();
-        }));
-
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Hoa phục sinh", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Hoa thiên diệu", () -> {
-                doiHoaPhucSinh(p, 1);
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Hoa dạ yến", () -> {
-                doiHoaPhucSinh(p, 2);
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Điểm sự kiện", () -> {
-                p.getService().showAlert("Hướng dẫn", "- Điểm sự kiện: " + NinjaUtils.getCurrency(p.getEventPoint().getPoint(EventPoint.DIEM_TIEU_XAI))
-                        + "\n\nBạn có thể quy đổi điểm sự kiện như sau\n- Hoa thiên diệu: 10.000 điểm\n- Hoa dạ yến: 10.000 điểm\n");
-            }));
-            p.getService().openUIMenu();
-        }));
-
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Đua Top", () -> {
-            p.menus.clear();
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Thả Lồng Đèn", () -> {
+        if (!isEnded()) {
+            menuItem(p, "Làm bánh", () -> {
                 p.menus.clear();
-                p.menus.add(new Menu(CMDMenu.EXECUTE, "Bảng xếp hạng", () -> {
-                    viewTop(p, TOP_LONG_DEN, "Thả Lồng Đèn", "%d. %s đã thả %s lồng đèn");
-                }));
-                p.menus.add(new Menu(CMDMenu.EXECUTE, "Phần thưởng", () -> {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("TOP 1:").append("\n");
-                    sb.append("- 1 thẻ đổi tên\n");
-                    sb.append("- Thú Cưỡi v.v MCS (tự chọn: Bạch Hổ, Phượng Hoàng Băng, Hỏa Kỳ Lân)\n");
-                    sb.append("- Mặt nạ thỏ v.v \n");
-                    sb.append("- Nhật tủ lam phong/Thiên nguyệt chi nữ v.v MCS\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- 1 Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 2:").append("\n");
-                    sb.append("- Thú Cưỡi v.v MCS (tự chọn: Bạch Hổ, Phượng Hoàng Băng, Hỏa Kỳ Lân)\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- 1 Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 3:").append("\n");
-                    sb.append("- Thú Cưỡi v.v Ramdom (tự chọn: Bạch Hổ, Phượng Hoàng Băng, Hỏa Kỳ Lân)\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- 1 Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 4 - 5:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- Nhật tủ lam phong/Thiên nguyệt chi nữ 1 tháng\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("Top 6 - 10:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang 2 tháng Ramdom\n");
-                    sb.append("- Nhật tủ lam phong/Thiên nguyệt chi nữ 1 tháng\n");
-                    p.getService().showAlert("Phần thưởng", sb.toString());
-                }));
-                if (isEnded()) {
-                    int ranking = getRanking(p, TOP_LONG_DEN);
-                    if (ranking <= 10 && p.getEventPoint().getRewarded(TOP_LONG_DEN) == 0) {
-                        p.menus.add(new Menu(CMDMenu.EXECUTE, String.format("Nhận Thưởng TOP %d", ranking), () -> {
-//                            receiveReward(p, TOP_LONG_DEN);
-                        }));
-                    }
-                }
-                p.getService().openUIMenu();
-            }));
-            p.menus.add(new Menu(CMDMenu.EXECUTE, "Bánh Trung Thu", () -> {
+                menuItem(p, "Bánh Thập Cẩm", () -> input(p, "Số bánh", n -> banhThapCam(p, n)));
+                menuItem(p, "Bánh Dẻo", () -> input(p, "Số bánh", n -> banhDeo(p, n)));
+                menuItem(p, "Bánh Đậu xanh", () -> input(p, "Số bánh", n -> banhDauXanh(p, n)));
+                menuItem(p, "Bánh Pía", () -> input(p, "Số bánh", n -> banhPia(p, n))); p.getService().openUIMenu();
+            });
+            menuItem(p, "Làm hộp bánh", () -> {
                 p.menus.clear();
-                p.menus.add(new Menu(CMDMenu.EXECUTE, "Bảng xếp hạng", () -> {
-                    viewTop(p, TOP_BANH_TRUNG_THU, "Bánh Trung Thu", "%d. %s đã làm %s hộp bánh");
-                }));
-                p.menus.add(new Menu(CMDMenu.EXECUTE, "Phần thưởng", () -> {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("TOP 1:").append("\n");
-                    sb.append("- 1 thẻ đổi tên\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- Mặt nạ oni v.v\n");
-                    sb.append("- 500.000 lượng\n");
-                    sb.append("- Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 2:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- Mặt nạ oni v.v\n");
-                    sb.append("- 300.000 lượng\n");
-                    sb.append("- Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 3:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang v.v Ramdom\n");
-                    sb.append("- 300.000 lượng\n");
-                    sb.append("- Cúp Lưu Niệm\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 4 - 5:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang 2 tháng Ramdom\n");
-                    sb.append("- 100.000 lượng\n");
-                    sb.append(" ").append("\n");
-
-                    sb.append("TOP 6 - 10:").append("\n");
-                    sb.append("- Lồng Đèn Thời Trang 1 tháng Ramdom\n");
-
-                    p.getService().showAlert("Phần thưởng", sb.toString());
-                }));
-                if (isEnded()) {
-                    int ranking = getRanking(p, TOP_BANH_TRUNG_THU);
-                    if (ranking <= 10 && p.getEventPoint().getRewarded(TOP_BANH_TRUNG_THU) == 0) {
-                        p.menus.add(new Menu(CMDMenu.EXECUTE, String.format("Nhận Thưởng TOP %d", ranking), () -> {
-//                            receiveReward(p, TOP_BANH_TRUNG_THU);
-                        }));
-                    }
-                }
+                menuItem(p, "Hộp bánh thường", () -> input(p, "Số hộp", n -> hopBanhThuong(p, n)));
+                menuItem(p, "Hộp bánh thượng hạng", () -> input(p, "Số hộp", n -> hopBanhThuongHang(p, n))); p.getService().openUIMenu();
+            });
+            menuItem(p, "Đổi quà", () -> {
+                p.menus.clear(); menuItem(p, "30 bánh phong lôi: Bạch hổ 30 ngày", () -> doiBachHo(p));
+                menuItem(p, "10 bánh phong lôi: Gậy 7 ngày", () -> doiVuKhiThoiTrang(p, ItemName.BANH_TRUNG_THU_PHONG_LOI, 10, EXPIRE_7_DAY));
+                menuItem(p, "30 bánh băng hỏa: Gậy 30 ngày", () -> doiVuKhiThoiTrang(p, ItemName.BANH_TRUNG_THU_BANG_HOA, 30, EXPIRE_30_DAY));
                 p.getService().openUIMenu();
-            }));
-            p.getService().openUIMenu();
-        }));
-
-        p.menus.add(new Menu(CMDMenu.EXECUTE, "Hướng dẫn", () -> {
-            StringBuilder sb = new StringBuilder();
-            sb.append("* Làm bánh trung thu").append("\n");
-            sb.append(" ").append("\n");
-            sb.append("- Trong quá trình diễn ra sự kiện các ninja có level từ 30 trở lên đánh quái +- 7 level sẽ có tỉ lệ nhận được các nguyên liệu sau:").append("\n");
-            sb.append("+ Bột mì, trứng, hạt sen, đường, đậu xanh, mứt").append("\n");
-            sb.append("- Dùng Thiên nhãn phù hay Khai nhãn phù có thể tăng tỉ lệ rơi nguyên liệu").append("\n");
-            sb.append("- Khi đã có đủ nguyên liệu các bạn có thể đến các làng gặp NPC Tiên Nữ để làm ra những chiếc bánh trung thu thơm ngon với công thức như sau:").append("\n");
-            sb.append("+ Bánh Thập Cẩm = 10 Bột + 5 Trứng + 5 Hạt sen + 5 Đường + 5 Mứt.").append("\n");
-            sb.append("+ Bánh Dẻo = 10 Bột + 5 Hạt sen + 5 Đường + 5 Mứt.").append("\n");
-            sb.append("+ Bánh Đậu xanh = 10 Bột + 5 Trứng + 5 Đường + 5 Đậu xanh.").append("\n");
-            sb.append("+ Bánh Pía = 10 Bột + 5 Trứng + 5 Đường + 5 Đậu xanh.").append("\n");
-            sb.append("- Bánh trung thu khóa").append("\n");
-            sb.append("- Tôi sẽ thu mỗi bạn một ít Yên cho tiền công làm bánh.").append("\n");
-            sb.append("+ Hộp bánh thường = 4 loại bánh + 1 giấy gói thường.").append("\n");
-            sb.append("+ Hộp bánh thượng hạng = 4 loại bánh + 1 giấy gói cao cấp. Có thể giao dịch. Khi làm sẽ tăng 1 điểm TOP sự kiện").append("\n");
-            sb.append("giấy gói thường và giấy gói cao cấp bán ở NPC Goosho . Có thể giao dịch").append("\n");
-
-            sb.append(" ").append("\n");
-            sb.append("--------------").append("\n");
-            sb.append(" ").append("\n");
-            sb.append("* Thả lồng đèn").append("\n");
-            sb.append(" ").append("\n");
-            sb.append("- Lồng đèn được bán tại NPC Goosho").append("\n");
-            sb.append("- Khi thả lồng đèn sẽ nhận được vp ngâu nhiên. Có thể giao dịch. Khi sử dụng sẽ tăng 1 điểm TOP sự kiện").append("\n");
-
-
-            sb.append(" ").append("\n");
-            sb.append("--------------").append("\n");
-            sb.append(" ").append("\n");
-            sb.append("* Rước đèn trung thu").append("\n");
-            sb.append(" ").append("\n");
-            sb.append("- Tại trường và các map sẽ xuất hiện lồng đèn.  ").append("\n");
-            sb.append("- Các ninja hay dùng Giấy thông hành mua tại NPC Goosho để rước đèn về gặp Hiệu trường và nhận thưởng").append("\n");
-            p.getService().showAlert("Hướng dẫn", sb.toString());
-        }));
+            });
+            menuItem(p, "Đổi lồng đèn", () -> {
+                p.menus.clear();
+                menuItem(p, "500.000 xu", () -> lanternShop(p, Char.DOI_LONG_DEN_XU, "500.000 xu"));
+                menuItem(p, "5 lượng", () -> lanternShop(p, Char.DOI_LONG_DEN_LUONG, "5 lượng")); p.getService().openUIMenu();
+            });
+            menuItem(p, "Nhận quà cán mốc", () -> milestoneMenu(p));
+        }
+        menuItem(p, "Đua TOP thả đèn", () -> {
+            p.menus.clear(); menuItem(p, "Bảng xếp hạng", () -> viewTop(p, LANTERNS, "TOP thả đèn", "%d. %s: %s đèn"));
+            menuItem(p, "Phần thưởng", () -> p.getService().showAlert("TOP Trung Thu 2026", topDescription()));
+            if (isEnded()) menuItem(p, "Nhận thưởng", () -> topChoice(p)); p.getService().openUIMenu();
+        });
+        menuItem(p, "Vật phẩm thiếu dữ liệu", () -> p.getService().showAlert("Đã bỏ qua", String.join("\n", getSkippedRewards())));
+        menuItem(p, "Hướng dẫn", () -> p.getService().showAlert("Trung Thu 2026",
+            "Cấp 20, đánh quái lệch tối đa 7 cấp (nhãn phù: 10). Làm bánh tại Tiên Nữ, mỗi bánh 15.000 yên.\n"
+            + "Mỗi loại bánh dùng tối đa 1.500/ngày. Hộp cần 4 loại bánh + giấy gói.\n"
+            + "Tabemono: giấy thường và đèn; Gosho: giấy cao cấp, thông hành và thời trang.\n"
+            + "TOP chỉ tính thả đèn, tối thiểu 5.000 đèn. Mốc hộp tính khi sử dụng, không tính khi làm.\n"
+            + "Vật phẩm chưa có dữ liệu được bỏ qua; xác suất/EXP/tiền thưởng là cấu hình Kiss, bài gốc không công bố."));
     }
-
-    @Override
-    public void initMap(Zone zone) {
-        boolean isTrungThu = NinjaUtils.isTrungThu();
-        Map map = zone.map;
-        int mapID = map.id;
-        switch (mapID) {
-            case MapName.KHU_LUYEN_TAP:
-                break;
-            case MapName.TRUONG_OOKAZA:
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU).x((short) 1426).y((short) 552).build());
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU_2).x((short) 784).y((short) 648).build());
-                if (isTrungThu) {
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 1426).y((short) 552).build());
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 784).y((short) 648).build());
+    private void lanternShop(Char p, byte command, String cost) {
+        p.setCommandBox(command); p.getService().openUIShopTrungThu(p.getListItemByID(LANTERN_ITEMS), "Đổi lồng đèn " + cost, "Đổi");
+    }
+    private List<EventPoint> ranked() {
+        return eventPoints.stream().filter(e -> e.getPoint(LANTERNS) >= 5000)
+            .sorted(Comparator.comparingInt((EventPoint e) -> e.getPoint(LANTERNS)).reversed()
+                .thenComparingInt(e -> e.getPoint(LANTERN_TIME)).thenComparingInt(EventPoint::getPlayerID))
+            .limit(10).collect(Collectors.toList());
+    }
+    @Override public int getRanking(Char p, String key) {
+        if (!LANTERNS.equals(key)) return 99;
+        List<EventPoint> list = ranked();
+        for (int i = 0; i < list.size(); i++) if (list.get(i).getPlayerID() == p.id) return i + 1;
+        return 99;
+    }
+    @Override public void viewTop(Char p, String key, String title, String format) {
+        StringBuilder text = new StringBuilder(); int rank = 1;
+        for (EventPoint e : ranked()) text.append(String.format(format, rank++, e.getPlayerName(), NinjaUtils.getCurrency(e.getPoint(LANTERNS)))).append('\n');
+        p.getService().showAlert(title, text.length() == 0 ? "Chưa có ninja đủ 5.000 đèn." : text.toString());
+    }
+    private String topDescription() {
+        return "TOP 1: 3 rương huyền bí, gậy vĩnh viễn tự chọn, Hakairo Yoroi vĩnh viễn, 300 đá danh vọng cấp 2.\n"
+            + "TOP 2: 2 rương huyền bí, gậy vĩnh viễn tự chọn, Hakairo Yoroi vĩnh viễn, 200 đá danh vọng cấp 2.\n"
+            + "TOP 3-5: 2 rương bạch ngân, Lân sư vũ/Bạch hổ 6 tháng, thời trang Trung Thu vĩnh viễn, lồng đèn thời trang vĩnh viễn, 200 đá danh vọng cấp 2.\n"
+            + "TOP 6-10: 2 Bát bảo, Lân sư vũ/Bạch hổ 6 tháng, pet Ứng Long 3 tháng có chống đồ sát, 200 đá danh vọng cấp 1.\n"
+            + "Bỏ qua lồng đèn rồng và bí kíp TOP có chỉ số riêng do thiếu dữ liệu gốc. Thú dùng bộ chỉ số Kiss hiện có.";
+    }
+    private void topChoice(Char p) {
+        if (!isEnded() || getRanking(p, LANTERNS) > 10 || p.getEventPoint().getRewarded(LANTERNS) != 0) { p.serverDialog("Không đủ điều kiện hoặc đã nhận thưởng."); return; }
+        p.menus.clear(); int rank = getRanking(p, LANTERNS);
+        if (rank <= 2) {
+            menuItem(p, "Gậy mặt trăng", () -> claimTop(p, ItemName.GAY_MAT_TRANG, -1));
+            menuItem(p, "Gậy trái tim", () -> claimTop(p, ItemName.GAY_TRAI_TIM, -1));
+        } else {
+            menuItem(p, "Lân sư vũ", () -> chooseLantern(p, ItemName.LAN_SU_VU));
+            menuItem(p, "Bạch hổ", () -> chooseLantern(p, ItemName.BACH_HO));
+        }
+        p.getService().openUIMenu();
+    }
+    private void chooseLantern(Char p, int mount) {
+        if (getRanking(p, LANTERNS) > 5) { claimTop(p, mount, -1); return; }
+        p.menus.clear();
+        for (int id : LANTERN_ITEMS) if (available(id)) menuItem(p, ItemManager.getInstance().getItemName(id), () -> claimTop(p, mount, id));
+        p.getService().openUIMenu();
+    }
+    private void claimTop(Char p, int chosen, int lantern) {
+        synchronized (p.getEventPoint()) {
+            int rank = getRanking(p, LANTERNS);
+            if (!isEnded() || rank > 10 || p.getEventPoint().getRewarded(LANTERNS) != 0) return;
+            List<Item> prizes = new ArrayList<>();
+            int chest = rank <= 2 ? ItemName.RUONG_HUYEN_BI : rank <= 5 ? ItemName.RUONG_BACH_NGAN : ItemName.BAT_BAO;
+            for (int i = 0; i < (rank == 1 ? 3 : 2); i++) if (available(chest)) prizes.add(rewardItem(chest, -1));
+            if (available(chosen)) {
+                Item prize = rewardItem(chosen, rank <= 2 ? -1 : 180);
+                if (rank >= 3) { prize.sys = 4; prize.randomOptionMount(); }
+                prizes.add(prize);
+            }
+            if (rank <= 2 && available(ItemName.HAKAIRO_YOROI)) prizes.add(rewardItem(ItemName.HAKAIRO_YOROI, -1));
+            if (rank >= 3 && rank <= 5) {
+                int fashion = p.gender == 1 ? ItemName.NHAT_TU_LAM_PHONG : ItemName.THIEN_NGUYET_CHI_NU;
+                if (available(fashion)) prizes.add(rewardItem(fashion, -1));
+                if (available(lantern)) {
+                    Item original = rewardItem(lantern, -1); original.randomOptionLongDen();
+                    int convertedId = DOI_PHAN_TU.next();
+                    if (available(convertedId)) { Item converted = rewardItem(convertedId, -1); converted.options.clear(); converted.options.addAll(original.options); prizes.add(converted); }
                 }
-                break;
-            case MapName.TRUONG_HARUNA:
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU).x((short) 502).y((short) 408).build());
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU).x((short) 1863).y((short) 360).build());
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU).x((short) 2048).y((short) 360).build());
-                if (isTrungThu) {
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 502).y((short) 408).build());
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 1863).y((short) 360).build());
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 2048).y((short) 360).build());
-                }
-                break;
-            case MapName.TRUONG_HIROSAKI:
-                zone.addNpc(NpcFactory.getInstance().newNpc(99, NpcName.LONG_DEN_2, 1307, 168, 0));
-                zone.addTree(Tree.builder().id(EffectAutoDataManager.CAY_TRUNG_THU).x((short) 1207).y((short) 168).build());
-                if (isTrungThu) {
-                    zone.addTree(Tree.builder().id(EffectAutoDataManager.THA_LONG_DEN).x((short) 1207).y((short) 168).build());
-                }
-                break;
+            }
+            if (rank >= 6 && available(ItemName.PET_UNG_LONG)) {
+                Item pet = rewardItem(ItemName.PET_UNG_LONG, 90); pet.randomOption();
+                pet.options.add(new ItemOption(ItemOptionName.MIEN_GIAM_SAT_THUONG_POINT_PERCENT_TYPE_8, 100)); prizes.add(pet);
+            }
+            int stone = rank <= 5 ? ItemName.DA_DANH_VONG_CAP_2 : ItemName.DA_DANH_VONG_CAP_1;
+            if (available(stone)) { Item item = rewardItem(stone, -1); item.setQuantity(rank == 1 ? 300 : 200); prizes.add(item); }
+            if (p.getSlotNull() < prizes.size()) { p.serverDialog("Hãy chừa " + prizes.size() + " ô trống."); return; }
+            for (Item item : prizes) p.addItemToBag(item);
+            p.getEventPoint().setRewarded(LANTERNS, 1);
+        }
+    }
+    private void milestoneMenu(Char p) {
+        p.menus.clear();
+        menuItem(p, "3.000 hộp thường: vũ khí 10x", () -> claimMilestone(p, false));
+        // Premium milestone requires seven-option costume + dragon lantern: unsupported data is skipped.
+        menuItem(p, "3.000 hộp cao cấp", () -> p.serverDialog("Quà mốc cao cấp chưa có đủ dữ liệu mặt nạ 7 dòng/lồng đèn rồng, được bỏ qua."));
+        p.getService().openUIMenu();
+    }
+    private void claimMilestone(Char p, boolean ignored) {
+        synchronized (p.getEventPoint()) {
+            if (!active(p) || p.getEventPoint().getPoint(COMMON_USED) < 3000 || p.getEventPoint().getRewarded(COMMON_USED) != 0) { p.serverDialog("Chưa đủ 3.000 hộp thường hoặc đã nhận."); return; }
+            if (p.classId < 1 || p.classId > 6) { p.serverDialog("Hãy chọn hệ trước khi nhận vũ khí."); return; }
+            int id = 1110 + p.classId;
+            if (!available(id)) { p.serverDialog("Không có dữ liệu vũ khí 10x của hệ này."); return; }
+            int chakra = findItem("Quả chakra vàng");
+            if (p.getSlotNull() < (chakra >= 0 ? 2 : 1)) { p.warningBagFull(); return; }
+            Item item = ItemFactory.getInstance().newItem10X(id, true); item.isLock = false; item.expire = System.currentTimeMillis() + 30 * DAY;
+            p.addItemToBag(item);
+            if (chakra >= 0) { Item fruit = rewardItem(chakra, -1); fruit.setQuantity(3); p.addItemToBag(fruit); }
+            p.getEventPoint().setRewarded(COMMON_USED, 1);
         }
     }
 }

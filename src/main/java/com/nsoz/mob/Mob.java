@@ -399,6 +399,9 @@ public class Mob {
 //                        || template.id == MobName.MY_HAU_TUONG
 //                        || template.id == MobName.HOA_KY_LAN_2
                 ) {
+                    if (Event.isTrungThu()) {
+                        return; // Reward is granted directly by dead(), once per defeated boss.
+                    }
                     itemId = RandomItem.BOSS_EVENT.next();
                 } else if (zone.map.id == MapName.DONG_HACHI || zone.map.id == MapName.KY_TUC_XA_HARUNA || zone.map.id == MapName.SONG_BANG_YAMATO) {
 //                    System.out.println("405-Mob");
@@ -480,6 +483,7 @@ public class Mob {
                 item.setQuantity(1);
             }
             if (type == EVENT || type == BI_MA) {
+                if (type == EVENT && Event.isTrungThu()) item.isLock = true;
                 if (owner != null) {
                     if (owner.getSlotNull() > 0) {
                         owner.addItemToBag(item);
@@ -727,6 +731,9 @@ public class Mob {
             if (zone != null) {
                 zone.mobDead(this, killer);
             }
+            if (Event.isTrungThu() && (this.template.id == MobName.HOA_KY_LAN || this.template.id == MobName.TU_HA_MA_THAN)) {
+                ((com.nsoz.event.TrungThuNew) Event.getEvent()).bossReward(killer);
+            }
             int dLevel = Math.abs(this.level - killer.level);
             if (Event.isKoroKing() && dLevel <= 10) {
                 if (NinjaUtils.nextInt(2000) == -1) {
@@ -899,7 +906,7 @@ public class Mob {
                         }
                     }
                     if (Event.isEvent()) {
-                        int distance = 5;
+                        int distance = Event.isTrungThu() ? 7 : 5;
                         int percentage = 10;
                         if (killer.isTNP || killer.isKNP || killer.isMayDo) {
                             distance = 10;
@@ -912,7 +919,7 @@ public class Mob {
                         if (zone.tilemap.isLangCo() || zone.tilemap.isVDMQ()) {
                             percentage += 2;
                         }
-                        if (dLevel <= distance) {
+                        if (dLevel <= distance && (!Event.isTrungThu() || killer.level >= 20)) {
                             int r = NinjaUtils.nextInt(100);
                             if (r < percentage) {
                                 dropItem(killer, EVENT);
